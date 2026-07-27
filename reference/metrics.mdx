@@ -1,0 +1,201 @@
+---
+title: "Fraud Detection Evaluation Metrics Reference"
+sidebarTitle: "Metrics"
+description: "Reference for accuracy, precision, recall, F1-score, and confusion matrix as used in FFD to evaluate and compare the six fraud classifiers."
+---
+
+Evaluating a fraud detection model with accuracy alone is dangerously misleading. Because genuine transactions vastly outnumber fraudulent ones in the credit card dataset, a naive classifier that labels every transaction as genuine can achieve **99%+ accuracy** while catching zero fraud. FFD therefore evaluates all six classifiers — Random Forest, SVM, KNN, Naive Bayes, XGBoost, and LightGBM — across a complementary set of metrics: **precision**, **recall**, **F1-score**, and the full **confusion matrix**. Together these metrics reveal not just how often a model is right, but *which kinds of errors* it makes and how costly those errors are in a fraud context.
+
+---
+
+## Accuracy
+
+Accuracy measures the overall fraction of predictions that are correct across both classes.
+
+**Formula:**
+
+$$
+\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}
+$$
+
+```python
+from sklearn.metrics import accuracy_score
+accuracy = accuracy_score(y_test, y_pred)
+```
+
+**Interpretation:** A high accuracy score can coexist with catastrophic fraud miss rates on an imbalanced dataset. For example, if only 0.17% of transactions are fraudulent (typical of the Kaggle credit card dataset), predicting *every* transaction as genuine yields ~99.83% accuracy while identifying no fraud at all. Use accuracy as a sanity check, not as a primary decision metric.
+
+<Warning>
+  Do not use accuracy as the sole evaluation criterion for fraud detection. A model that never predicts fraud will appear highly accurate on imbalanced datasets. Always inspect precision, recall, and the confusion matrix alongside accuracy.
+</Warning>
+
+---
+
+## Precision
+
+Precision answers: *"Of all the transactions my model flagged as fraud, what fraction were actually fraudulent?"*
+
+**Formula:**
+
+$$
+\text{Precision} = \frac{TP}{TP + FP}
+$$
+
+```python
+from sklearn.metrics import precision_score
+precision = precision_score(y_test, y_pred)
+```
+
+**Interpretation in fraud context:** A high precision means fewer false alarms — genuine customers are less likely to have their transactions incorrectly blocked or to receive unnecessary fraud alerts. Low precision wastes investigator resources and degrades customer experience. Precision is particularly important when the downstream cost of a false positive (e.g., freezing a legitimate account) is high.
+
+---
+
+## Recall (Sensitivity)
+
+Recall answers: *"Of all the actual fraudulent transactions, what fraction did my model catch?"*
+
+**Formula:**
+
+$$
+\text{Recall} = \frac{TP}{TP + FN}
+$$
+
+```python
+from sklearn.metrics import recall_score
+recall = recall_score(y_test, y_pred)
+```
+
+**Interpretation in fraud context:** Recall is the **most critical metric** in fraud detection. A missed fraud (False Negative) means a fraudulent transaction goes undetected and causes direct financial loss to the cardholder or issuing bank. The cost of a missed fraud almost always exceeds the cost of a false alarm, making recall the primary optimization target in production fraud systems.
+
+<Warning>
+  A False Negative — predicting a fraudulent transaction as genuine — is the most costly error in production. A model with high accuracy but low recall is unfit for fraud detection purposes, as it will silently miss a significant portion of actual fraud cases.
+</Warning>
+
+---
+
+## F1-Score
+
+The F1-score is the harmonic mean of precision and recall, providing a single balanced metric when both false positives and false negatives matter.
+
+**Formula:**
+
+$$
+F_1 = 2 \cdot \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+$$
+
+```python
+from sklearn.metrics import f1_score
+f1 = f1_score(y_test, y_pred)
+```
+
+**Interpretation:** The harmonic mean penalizes extreme imbalances between precision and recall more severely than the arithmetic mean would. A model that achieves 100% recall by flagging every transaction as fraud would score very low on F1 due to near-zero precision. F1 is useful when comparing models holistically, but for fraud detection the recall component deserves additional weight in final model selection.
+
+---
+
+## Classification Report
+
+scikit-learn's `classification_report` generates a formatted per-class breakdown of all key metrics in a single call, covering both the genuine (`Class 0`) and fraudulent (`Class 1`) classes.
+
+```python
+from sklearn.metrics import classification_report
+print(classification_report(y_test, y_pred))
+```
+
+**Example output format:**
+
+```
+              precision    recall  f1-score   support
+
+           0       0.99      1.00      1.00     56864
+           1       0.95      0.82      0.88        98
+
+    accuracy                           0.99     56962
+   macro avg       0.97      0.91      0.94     56962
+weighted avg       0.99      0.99      0.99     56962
+```
+
+**Column reference:**
+
+| Column | Meaning |
+|---|---|
+| `precision` | Fraction of predicted positives that are true positives for that class |
+| `recall` | Fraction of actual positives correctly identified for that class |
+| `f1-score` | Harmonic mean of precision and recall for that class |
+| `support` | Number of actual instances of that class in `y_test` |
+
+**Row reference:**
+
+| Row | Meaning |
+|---|---|
+| `0` (genuine) | Metrics computed with Class 0 as the positive class |
+| `1` (fraud) | Metrics computed with Class 1 as the positive class — **the rows to focus on** |
+| `macro avg` | Unweighted mean of per-class metrics — treats both classes equally regardless of support |
+| `weighted avg` | Support-weighted mean — dominated by the majority class (genuine) on imbalanced data |
+
+<Note>
+  On a highly imbalanced fraud dataset, the `weighted avg` row is dominated by Class 0 (genuine transactions) and can look deceptively strong. Always inspect the **Class 1 row** directly to assess the model's actual fraud detection capability.
+</Note>
+
+---
+
+## Confusion Matrix
+
+The confusion matrix provides a complete breakdown of prediction outcomes for binary classification, making every type of error visible at a glance.
+
+```python
+from sklearn.metrics import confusion_matrix
+cm = confusion_matrix(y_test, y_pred)
+print(cm)
+```
+
+**Output layout** (rows = actual class, columns = predicted class):
+
+```
+                  Predicted Genuine   Predicted Fraud
+Actual Genuine  [       TN          |       FP        ]
+Actual Fraud    [       FN          |       TP        ]
+```
+
+| Cell | Name | Description | Cost |
+|---|---|---|---|
+| Top-left | **True Negative (TN)** | Genuine transaction correctly identified as genuine | None — correct outcome |
+| Top-right | **False Positive (FP)** | Genuine transaction incorrectly flagged as fraud | Low-to-medium — false alarm, customer friction |
+| Bottom-left | **False Negative (FN)** | Fraudulent transaction missed, labeled as genuine | **High** — undetected fraud, direct financial loss |
+| Bottom-right | **True Positive (TP)** | Fraudulent transaction correctly identified as fraud | None — correct outcome |
+
+**Visualization example** using seaborn:
+
+```python
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+cm = confusion_matrix(y_test, y_pred)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+            xticklabels=['Genuine', 'Fraud'],
+            yticklabels=['Genuine', 'Fraud'])
+plt.ylabel('Actual')
+plt.xlabel('Predicted')
+plt.title('Confusion Matrix')
+plt.show()
+```
+
+<Tip>
+  In production fraud systems, a **high recall** (minimizing False Negatives) is typically preferred over high precision (minimizing False Positives). The financial and reputational cost of undetected fraud almost always exceeds the operational cost of manually reviewing a suspicious-but-legitimate transaction. When tuning a classifier's decision threshold, shift it toward higher recall — accept more false alarms to ensure fewer frauds slip through.
+</Tip>
+
+---
+
+## Choosing the Right Metric
+
+Use this table to guide metric selection based on the operational priority of your deployment:
+
+| Priority | Metric to Maximize | Why |
+|---|---|---|
+| Minimize **missed fraud** (False Negatives) | **Recall** | Catches the largest fraction of actual fraud; reduces undetected financial loss |
+| Minimize **false alerts** (False Positives) | **Precision** | Reduces unnecessary account freezes and customer friction |
+| Balance both types of error | **F1-Score** | Harmonic mean penalizes extreme imbalance between precision and recall |
+| Overall sanity check | **Accuracy** | Useful only when classes are balanced; always pair with the above metrics on fraud data |
+
+<Note>
+  For model comparison across the six FFD classifiers, prioritize the **Class 1 recall** and **F1-score** columns from the classification report. A model that ranks first on accuracy but second on recall may be the worse production choice depending on the fraud cost tolerance of the deployment environment.
+</Note>

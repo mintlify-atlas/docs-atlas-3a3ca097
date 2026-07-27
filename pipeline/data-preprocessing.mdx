@@ -1,0 +1,96 @@
+---
+title: "Data Preprocessing and Exploratory Analysis for Fraud Detection"
+sidebarTitle: "Data Preprocessing"
+description: "Clean and prepare the credit card dataset: handle missing values, drop Time, scale Amount, split features from labels, and visualize with PCA."
+---
+
+The raw credit card transaction dataset requires several cleaning and transformation steps before it can be used to train fraud detection models. This page walks through each preprocessing stage — from loading the CSV to producing a PCA scatter plot that reveals how genuine and fraudulent transactions cluster in two-dimensional space.
+
+## Loading the Dataset
+
+The dataset is a CSV file containing **50,492 transaction rows** and **31 columns** (including the `Class` label). Load it with pandas and take an initial look at its structure:
+
+```python
+import numpy as np
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
+
+# Load the raw transaction dataset
+data = pd.read_csv('Creditcard_dataset.csv')
+
+print(data.shape)   # (50492, 31)
+data.head()
+```
+
+The `Class` column is the target label: `0` for genuine transactions and `1` for fraudulent ones. The remaining 30 columns are either raw transaction features (`Time`, `Amount`) or PCA-transformed anonymised features (`V1`–`V28`).
+
+## Cleaning Steps
+
+<Steps>
+  <Step title="Remove rows with NaN values">
+    Drop any row that contains at least one missing value to ensure every sample is complete before training.
+  </Step>
+  <Step title="Drop the Time column">
+    The `Time` column records elapsed seconds since the first transaction and carries no predictive signal once the dataset is shuffled for training. It is removed entirely.
+  </Step>
+  <Step title="Scale the Amount column">
+    Transaction amounts vary across several orders of magnitude. Applying `StandardScaler` brings `Amount` onto the same scale as the anonymised `V1`–`V28` features, preventing large raw values from dominating distance-based and gradient-based learners.
+  </Step>
+  <Step title="Split features and labels">
+    Separate the cleaned DataFrame into a feature matrix `X` (all columns except `Class`) and a label vector `y` (`Class`).
+  </Step>
+</Steps>
+
+The complete preprocessing block:
+
+```python
+# 1. Remove incomplete rows
+data = data.dropna()
+
+# 2. Drop the Time column
+data = data.drop(columns=['Time'])
+
+# 3. Scale the Amount column
+scaler = StandardScaler()
+data['Amount'] = scaler.fit_transform(data[['Amount']])
+
+# 4. Split into features and labels
+X = data.drop(columns=['Class'])
+y = data['Class']
+```
+
+## PCA Visualization
+
+After cleaning, a two-component PCA projection gives an intuitive visual check of how separable the two classes are before any model is trained.
+
+```python
+# Project down to 2 dimensions for visualization
+pca = PCA(2)
+X_pca = pca.fit_transform(X)
+
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(8, 5))
+plt.scatter(X_pca[y == 0, 0], X_pca[y == 0, 1],
+            label='Genuine', alpha=0.3, s=5, c='steelblue')
+plt.scatter(X_pca[y == 1, 0], X_pca[y == 1, 1],
+            label='Fraud',   alpha=0.8, s=10, c='crimson')
+plt.xlabel('PC 1')
+plt.ylabel('PC 2')
+plt.title('PCA Projection: Genuine vs Fraud Transactions')
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+The resulting scatter plot reveals that fraudulent transactions (red) tend to occupy a distinct, compact region of the feature space, while genuine transactions (blue) form a much broader cloud. This separation confirms that the downstream classifiers have a meaningful signal to learn from.
+
+<Note>
+  **Why drop `Time` and scale `Amount`?**
+  `Time` is an absolute counter that leaks chronological ordering — a model trained on early transactions and tested on later ones could learn spurious temporal patterns rather than genuine fraud signals. Dropping it makes the pipeline robust to any re-ordering of the data.
+
+  `Amount` is the only feature left in its original monetary scale after `Time` is removed. Without scaling, its raw magnitude (which can reach thousands) would dominate algorithms that rely on Euclidean distances (KNN) or gradient magnitudes (neural networks in the GAN), leading to slower convergence and biased decision boundaries.
+</Note>

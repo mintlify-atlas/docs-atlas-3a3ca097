@@ -1,47 +1,121 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Financial Fraud Detection"
+sidebarTitle: "Quickstart"
+description: "Clone the FFD repository, install dependencies, and run the complete fraud detection pipeline in under 10 minutes."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+By the end of this guide you will have the FFD repository running locally, all dependencies installed, and the complete pipeline executing — from loading raw credit card transaction data all the way through GAN training, synthetic data generation, and evaluation of six fraud detection classifiers.
 
 ## Prerequisites
 
-Before you begin, you must have:
+- **Python 3.8+** installed and available on your `PATH`
+- **pip** for package installation
+- **Git** to clone the repository
+- **Jupyter** to run the notebook (`pip install notebook` if needed)
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+## Steps
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Clone the repository">
+    Clone the FFD repository from GitHub and move into the project directory:
 
     ```bash
-    npm install your-package
+    git clone https://github.com/Antisource/FFD.git && cd FFD
     ```
+
+    The repository contains the notebook (`Design_Project.ipynb`) and the dataset (`Creditcard_dataset.csv`) in the same directory. The notebook loads the CSV by relative path, so both files must remain together.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Install dependencies">
+    Install all required packages with a single `pip` command:
 
     ```bash
-    your-cli init
+    pip install tensorflow==2.11 visualkeras numpy pandas scikit-learn seaborn matplotlib plotly
     ```
+
+    <Note>
+      `tensorflow==2.11` is pinned to this exact version. The notebook uses `tensorflow.keras` APIs (including `BatchNormalization`, `LeakyReLU`, `RandomNormal`, and the functional `Model` API) that require TensorFlow 2.11 for compatibility. Installing a different version may cause import errors or unexpected behavior.
+    </Note>
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Launch Jupyter">
+    Open the notebook directly from the project root:
 
     ```bash
-    your-cli start
+    jupyter notebook Design_Project.ipynb
     ```
+
+    Your browser will open the notebook. All cells must be run from the project root so that the relative path `Creditcard_dataset.csv` resolves correctly.
+  </Step>
+
+  <Step title="Run cells in order">
+    Execute every cell from top to bottom. The notebook is divided into seven sequential steps:
+
+    | Step | What it does |
+    |------|-------------|
+    | **1 — Import dependencies** | Installs and imports TensorFlow/Keras, scikit-learn, XGBoost, LightGBM, pandas, NumPy, and visualization libraries. Prints `Modules are imported!` on success. |
+    | **2 — Load dataset** | Reads `Creditcard_dataset.csv` into a DataFrame (`data = pd.read_csv("Creditcard_dataset.csv")`), then displays shape `(50492, 31)` and class counts (`0: 50000`, `1: 492`). |
+    | **3 — Data preprocessing** | Drops `NaN` rows, removes the `Time` column, scales `Amount` with `StandardScaler`, splits features `x` and labels `y`, and renders a 2-D PCA scatter plot of the full dataset. |
+    | **4 — Build generator** | Defines and calls `build_generator()` — a Keras sequential model that maps a noise vector to a 29-dimensional synthetic fraud sample using `Dense`, `BatchNormalization`, `LeakyReLU`, and `Dropout` layers. |
+    | **5 — Build discriminator** | Defines and calls `build_discriminator()` — a Keras sequential binary classifier (`input_dim=29`) that learns to separate real from fake fraud records. |
+    | **6 — Assemble GAN** | Calls `build_gan(generator, discriminator)`, freezes the discriminator weights (`discriminator.trainable = False`), and compiles the combined model with `adam` optimizer and `binary_crossentropy` loss. |
+    | **7 — Train, generate, classify, evaluate** | Runs the full GAN training loop, generates synthetic data, trains all six classifiers, and prints evaluation reports. |
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## What Happens Next
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+### GAN Training
+
+The GAN trains for **1,000 epochs** with a batch size of 64 (32 real + 32 synthetic samples per discriminator update). During training, `monitor_generator()` is called periodically to visualize generator quality: it applies PCA to both real fraud samples and the generator's current output, then plots both distributions on a shared 2-D scatter plot so you can watch the synthetic data converge toward the real distribution.
+
+### Synthetic Data Generation
+
+After training, `generate_synthetic_data(generator, 492)` draws 492 random noise vectors from a standard normal distribution, passes them through the trained generator, and returns 492 synthetic fraud feature vectors. These are appended to the real dataset before classifiers are trained, producing a balanced training split.
+
+```python
+synthetic_data = generate_synthetic_data(generator, 492)
+```
+
+### Classifier Training
+
+Six classifiers are instantiated and fitted on the augmented (real + synthetic) training set in a single code cell:
+
+```python
+# Model 1: Random Forest
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(x_train, y_train)
+
+# Model 2: Support Vector Machine
+svm_model = SVC(kernel='rbf', gamma='scale', random_state=42)
+svm_model.fit(x_train, y_train)
+
+# Model 3: K-Nearest Neighbors
+knn_model = KNeighborsClassifier(n_neighbors=5)
+knn_model.fit(x_train, y_train)
+
+# Model 4: Naive Bayes
+nb_model = GaussianNB()
+nb_model.fit(x_train, y_train)
+
+# Model 5: XGBoost
+xgb_model = xgb.XGBClassifier(random_state=42)
+xgb_model.fit(x_train, y_train)
+
+# Model 6: LightGBM
+lgb_model = lgb.LGBMClassifier(random_state=42)
+lgb_model.fit(x_train, y_train)
+```
+
+## Expected Output
+
+For each of the six classifiers the notebook prints a full **classification report** and renders a **confusion matrix heatmap**. You will see per-class metrics for both the genuine (`0`) and fraudulent (`1`) transaction classes:
+
+| Metric | Description |
+|--------|-------------|
+| **Accuracy** | Overall fraction of correctly classified transactions |
+| **Precision** | Of all transactions predicted as fraud, how many actually were |
+| **Recall** | Of all actual fraud transactions, how many were caught |
+| **F1-score** | Harmonic mean of precision and recall — the primary metric for imbalanced problems |
+
+The confusion matrix heatmap (rendered via `seaborn`) shows true positives, false positives, true negatives, and false negatives for each model, making it easy to compare how different classifiers handle the fraud vs. genuine trade-off.

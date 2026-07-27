@@ -1,0 +1,97 @@
+---
+title: "Naive Bayes Gaussian Classifier for Fraud Detection"
+sidebarTitle: "Naive Bayes"
+description: "Apply GaussianNB to model transaction features as Gaussian distributions and compute posterior fraud probability using Bayes' theorem."
+---
+
+Gaussian Naive Bayes is the simplest probabilistic classifier in the FFD pipeline and acts as a fast, interpretable baseline. Given a transaction's 29 PCA-derived features, GaussianNB estimates the probability that it belongs to Class 1 (fraud) by computing the posterior under Bayes' theorem, modelling each feature's class-conditional likelihood as a univariate Gaussian. Despite its strong independence assumption, it is competitive on the PCA-transformed FFD features because PCA explicitly decorrelates the input space.
+
+## How Gaussian Naive Bayes Works
+
+Bayes' theorem relates the posterior probability of fraud to the likelihood and prior:
+
+```
+P(fraud | x) ∝ P(x | fraud) × P(fraud)
+```
+
+The **"naive"** part is the conditional independence assumption:
+
+```
+P(x | class) = ∏ P(xᵢ | class)
+```
+
+Each feature *xᵢ* is assumed to be drawn from a Gaussian distribution whose mean and variance are estimated from the training set for each class:
+
+```
+P(xᵢ | class) = N(xᵢ; μᵢ_class, σ²ᵢ_class)
+```
+
+At inference time the class with the higher posterior wins. Training reduces to computing 2 × 29 = 58 means and 58 variances — extremely fast.
+
+Key properties:
+
+- **Speed** — parameter estimation is O(n · d); prediction is O(d) per sample.
+- **No iterative optimisation** — fits in a single pass over the training data.
+- **Calibrated probabilities** — outputs can be interpreted directly as fraud probabilities when the Gaussian assumption holds.
+
+## Implementation
+
+GaussianNB has no mandatory hyperparameters; the notebook uses all defaults:
+
+```python
+from sklearn.naive_bayes import GaussianNB
+
+nb_model = GaussianNB()
+nb_model.fit(x_train, y_train)
+nb_predictions = nb_model.predict(x_test)
+```
+
+## Key Hyperparameters
+
+| Parameter | Default | Guidance |
+|---|---|---|
+| `var_smoothing` | `1e-9` | Adds a fraction of the largest feature variance to all feature variances, preventing division by zero for near-constant features. Increase (e.g. `1e-6`) if the model is numerically unstable or if some PCA components have very low variance. |
+| `priors` | `None` (estimated from data) | Supply `priors=[p_genuine, p_fraud]` to override the empirical class frequencies, for example when the training set has been augmented by GAN and no longer reflects real-world fraud rates. |
+
+## Evaluation
+
+```python
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+
+print(classification_report(y_test, nb_predictions))
+print("Confusion matrix:\n", confusion_matrix(y_test, nb_predictions))
+print("Accuracy :", accuracy_score(y_test, nb_predictions))
+print("Precision:", precision_score(y_test, nb_predictions))
+print("Recall   :", recall_score(y_test, nb_predictions))
+print("F1       :", f1_score(y_test, nb_predictions))
+```
+
+GaussianNB tends to have higher recall but lower precision compared to tree-based ensembles — it rarely misses a genuine fraud signal but may generate more false positives. The confusion matrix is the clearest tool for assessing this trade-off.
+
+<Note>
+  **Why the independence assumption is reasonable here:** The V1–V28 features are
+  the result of **Principal Component Analysis (PCA)** applied to the original
+  transaction features. By construction, PCA components are orthogonal and
+  therefore linearly uncorrelated. Naive Bayes assumes conditional independence
+  (a stronger claim), but decorrelated features violate this assumption less
+  severely than correlated raw features would, making GaussianNB a natural fit
+  for the FFD feature space.
+</Note>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Training Pipeline" href="/pipeline/evaluation" icon="diagram-project">
+    End-to-end pipeline: data loading, GAN augmentation, train/test split, and unified evaluation loop.
+  </Card>
+  <Card title="Metrics Reference" href="/reference/metrics" icon="chart-bar">
+    Definitions of accuracy, precision, recall, and F1 as used across all six FFD classifiers.
+  </Card>
+</CardGroup>

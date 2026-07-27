@@ -1,0 +1,97 @@
+---
+title: "Class Imbalance in Fraud Detection: The Sampling Challenge"
+sidebarTitle: "Class Imbalance"
+description: "With only 492 fraud cases among 50,000 genuine transactions, naive classifiers default to 99%+ accuracy by ignoring fraud. Learn how FFD solves this with a GAN."
+---
+
+In real-world fraud detection, fraudulent events are rare by design — and that rarity creates a fundamental machine learning challenge. When a dataset contains vastly more examples of one class than another, standard classifiers tend to learn the easy answer: predict the majority class for every input. The result is a model that looks highly accurate on paper but is operationally useless, because it never actually flags any fraud.
+
+## The Imbalance Problem
+
+The FFD dataset contains **50,000 genuine transactions** (Class = 0) and only **492 fraudulent transactions** (Class = 1) out of 50,492 total records.
+
+```
+Fraud rate = 492 / 50,492 ≈ 0.975%
+```
+
+A classifier that simply labels every transaction as genuine achieves over **99% accuracy** without learning anything about fraud patterns. Standard accuracy is therefore a misleading metric here. What matters is whether the model correctly identifies the rare fraud cases — a property measured by **recall** (also called sensitivity or true positive rate).
+
+<CardGroup cols={2}>
+  <Card title="Naive Classifier Accuracy" icon="percent">
+    **>99%** — by predicting all transactions as genuine
+  </Card>
+  <Card title="Naive Classifier Fraud Recall" icon="xmark">
+    **0%** — zero fraudulent transactions caught
+  </Card>
+</CardGroup>
+
+## Why Standard Oversampling Falls Short
+
+The most common approaches to class imbalance — **random oversampling** and **SMOTE (Synthetic Minority Oversampling Technique)** — have well-known limitations in high-dimensional fraud detection scenarios:
+
+- **Random oversampling** duplicates existing minority samples verbatim. This causes the classifier to memorise specific fraud records rather than learning generalizable fraud patterns, leading to overfitting on the minority class.
+- **SMOTE** generates new samples by interpolating between existing minority-class neighbours in feature space. While more principled than duplication, SMOTE can produce unrealistic samples in high-dimensional, PCA-transformed spaces where linear interpolation may not respect the true data manifold. It also struggles when the minority class is very small (492 samples), as there are few neighbours to interpolate between.
+
+Both methods lack the capacity to model the full joint distribution of fraud features, especially across 29 dimensions.
+
+## The GAN Approach
+
+FFD trains a **Generative Adversarial Network (GAN)** on the 492 real fraud samples. Once trained, the generator can produce arbitrarily many new synthetic fraud transactions that statistically resemble real fraud data — not by copying or interpolating, but by learning the underlying distribution.
+
+After training, **492 synthetic fraud samples** are generated and combined with the original dataset, bringing the class ratio close to **1:1** for the training phase of the downstream classifiers.
+
+```python
+def generate_synthetic_data(generator, num_samples):
+    noise = np.random.normal(0, 1, (num_samples, generator.input_shape[1]))
+    fake_data = generator.predict(noise)
+    return fake_data
+```
+
+The function works as follows:
+
+1. **Sample noise** — draw a random normal noise vector of shape `(num_samples, latent_dim)` where `latent_dim` matches the generator's input dimension (29).
+2. **Generate samples** — pass the noise through the trained generator to produce `num_samples` synthetic feature vectors.
+3. **Return data** — the output is a NumPy array ready to be concatenated with the real fraud data.
+
+To generate the 492 synthetic samples used for balancing:
+
+```python
+synthetic_data = generate_synthetic_data(generator, 492)
+```
+
+## Monitoring Synthesis Quality
+
+During GAN training, the `monitor_generator()` function is called every 10 epochs to provide a visual check that the generator is producing realistic fraud-like data.
+
+```python
+def monitor_generator(generator):
+    pca = PCA(n_components=2)
+
+    real_fraud_data = data_fraud.drop("Class", axis=1)
+    transformed_data_real = pca.fit_transform(real_fraud_data.values)
+    df_real = pd.DataFrame(transformed_data_real)
+    df_real['label'] = "real"
+
+    synthetic_fraud_data = generate_synthetic_data(generator, 492)
+    transformed_data_fake = pca.fit_transform(synthetic_fraud_data)
+    df_fake = pd.DataFrame(transformed_data_fake)
+    df_fake['label'] = "fake"
+
+    df_combined = pd.concat([df_real, df_fake])
+
+    plt.figure()
+    sns.scatterplot(data=df_combined, x=0, y=1, hue='label', s=10)
+    plt.show()
+```
+
+The function:
+
+1. Projects both real and synthetic fraud samples down to **2 principal components** using `sklearn.decomposition.PCA`.
+2. Creates a combined DataFrame tagged with `"real"` or `"fake"` labels.
+3. Renders a **scatter plot** coloured by label, so you can visually assess whether synthetic samples overlap well with the real fraud cluster.
+
+At the start of training the two clusters are well separated; as training progresses they should converge, indicating the generator has learned the real fraud distribution.
+
+<Tip>
+  When evaluating fraud detection models, always prioritise **recall** (the fraction of actual fraud cases caught) over raw accuracy. A model with 95% accuracy but 40% recall is missing more than half of all fraudulent transactions — the most costly outcome in a production system. Use the F1-score or precision-recall AUC to compare models fairly.
+</Tip>

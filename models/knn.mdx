@@ -1,0 +1,85 @@
+---
+title: "K-Nearest Neighbours Classifier for Fraud Detection"
+sidebarTitle: "KNN"
+description: "Use KNeighborsClassifier to classify transactions by proximity to their k nearest neighbours in the PCA-preprocessed feature space."
+---
+
+K-Nearest Neighbours (KNN) is a **non-parametric, instance-based** classifier: it stores the entire training set and, at inference time, classifies each test transaction by looking at the *k* closest training examples in the 29-dimensional PCA feature space. In the FFD pipeline, the GAN-augmented training set provides enough fraud examples near the decision boundary that the neighbourhood vote is informative even at the default `k=5`.
+
+## How KNN Works
+
+KNN makes no assumptions about the underlying distribution of features. Instead, it relies on the **smoothness assumption**: nearby points in feature space are likely to share the same class label.
+
+Classification steps:
+
+1. **Compute distances** from the query point to every training sample. The default metric is **Euclidean distance** in the PCA feature space (V1–V28 + scaled Amount).
+2. **Select the k nearest neighbours** — the k training samples with the smallest distances.
+3. **Majority vote** — the predicted class is the label held by the most neighbours. With `weights='distance'`, closer neighbours cast heavier votes.
+
+Characteristics relevant to fraud detection:
+
+- **Lazy learning** — no explicit training phase; all computation happens at prediction time, so inference is slower than tree-based models on large test sets.
+- **Local decision boundary** — can capture complex, non-convex fraud clusters that a single global hyperplane (SVM) might miss.
+- **Sensitive to scaling** — PCA-transformed features are already centred and comparably scaled, which is a prerequisite for meaningful Euclidean distances.
+
+## Implementation
+
+The notebook uses `n_neighbors=5`, the library default:
+
+```python
+from sklearn.neighbors import KNeighborsClassifier
+
+knn_model = KNeighborsClassifier(n_neighbors=5)
+knn_model.fit(x_train, y_train)
+knn_predictions = knn_model.predict(x_test)
+```
+
+## Key Hyperparameters
+
+| Parameter | Notebook value | Guidance |
+|---|---|---|
+| `n_neighbors` (`k`) | `5` | Smaller k → more flexible boundary, higher variance. Larger k → smoother boundary, higher bias. Use cross-validation to tune. |
+| `metric` | `'minkowski'` (p=2, i.e., Euclidean) | `'euclidean'` and `'manhattan'` are the most common alternatives. Euclidean works well for PCA-transformed data. |
+| `weights` | `'uniform'` | Set to `'distance'` so that closer neighbours contribute more; often improves recall on fraud. |
+| `algorithm` | `'auto'` | `'ball_tree'` or `'kd_tree'` can be faster for moderate-dimensional spaces; `'brute'` is exact but slow for large n. |
+| `p` | `2` | Exponent in the Minkowski metric: `p=2` gives Euclidean, `p=1` gives Manhattan. |
+
+## Evaluation
+
+```python
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+
+print(classification_report(y_test, knn_predictions))
+print("Confusion matrix:\n", confusion_matrix(y_test, knn_predictions))
+print("Accuracy :", accuracy_score(y_test, knn_predictions))
+print("Precision:", precision_score(y_test, knn_predictions))
+print("Recall   :", recall_score(y_test, knn_predictions))
+print("F1       :", f1_score(y_test, knn_predictions))
+```
+
+Because KNN is a lazy learner, prediction time grows linearly with training-set size. On the ~51k-sample augmented dataset this is measurable but acceptable. Monitor recall on Class 1 (fraud) — if it is substantially lower than precision, consider decreasing `k` or switching to `weights='distance'`.
+
+<Tip>
+  **Choosing k:** Always prefer an **odd value** of `k` for binary
+  classification — this prevents ties in the majority vote. Cross-validate over
+  a range such as `[3, 5, 7, 11, 15]` on the training fold to find the value
+  that maximises F1 on the fraud class before committing to a final model.
+</Tip>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Training Pipeline" href="/pipeline/evaluation" icon="diagram-project">
+    End-to-end pipeline: data loading, GAN augmentation, train/test split, and unified evaluation loop.
+  </Card>
+  <Card title="Metrics Reference" href="/reference/metrics" icon="chart-bar">
+    Definitions of accuracy, precision, recall, and F1 as used across all six FFD classifiers.
+  </Card>
+</CardGroup>

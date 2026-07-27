@@ -1,72 +1,72 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "name": "Financial Fraud Detection",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#fcb40b",
+    "light": "#b08004",
+    "dark": "#040404"
   },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
+  "favicon": "https://media.brand.dev/5860e3ea-4bd7-44df-8fba-812db7d6e67b.png",
   "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "light": "https://media.brand.dev/896b9b5c-9247-4fba-897f-f8c2b1ef1e02.svg",
+    "dark": "https://media.brand.dev/b6f45634-72bb-4e7a-bd02-fad253dfaf4d.svg"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
     "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "type": "github",
+      "href": "https://github.com/Antisource/FFD"
     }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/Antisource/FFD"
     }
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Overview",
+        "pages": [
+          "introduction",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Concepts",
+        "pages": [
+          "concepts/dataset",
+          "concepts/class-imbalance",
+          "concepts/gan-architecture"
+        ]
+      },
+      {
+        "group": "Pipeline",
+        "pages": [
+          "pipeline/data-preprocessing",
+          "pipeline/gan-training",
+          "pipeline/model-training",
+          "pipeline/evaluation"
+        ]
+      },
+      {
+        "group": "Models",
+        "pages": [
+          "models/random-forest",
+          "models/svm",
+          "models/knn",
+          "models/naive-bayes",
+          "models/xgboost",
+          "models/lightgbm"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/dependencies",
+          "reference/metrics"
+        ]
+      }
+    ]
   }
 }

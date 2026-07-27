@@ -1,0 +1,122 @@
+---
+title: "Evaluating and Comparing Fraud Detection Models"
+sidebarTitle: "Evaluation"
+description: "Measure classifier performance using accuracy, precision, recall, F1-score, confusion matrices, and classification reports from scikit-learn."
+---
+
+After training, each of the six classifiers is evaluated on the held-out test set using a consistent set of scikit-learn metrics. Because fraud detection is a high-stakes, class-imbalanced problem, a single accuracy number is not sufficient — the evaluation suite captures how well each model identifies the rare positive class (fraud) without flooding analysts with false alarms.
+
+## Evaluation Metrics
+
+| Metric | Formula | Why it matters for fraud |
+|---|---|---|
+| **Accuracy** | (TP + TN) / Total | Overall correctness across both classes. Can be misleadingly high when genuine transactions dominate. |
+| **Precision** | TP / (TP + FP) | Of every transaction flagged as fraud, how many were genuinely fraudulent. Low precision means too many false alarms. |
+| **Recall** | TP / (TP + FN) | Of all real fraud cases, how many were actually caught. A missed fraud goes undetected and causes direct financial loss. |
+| **F1-score** | 2 × (Precision × Recall) / (Precision + Recall) | Harmonic mean of precision and recall. Balances the trade-off between catching fraud and avoiding false positives. |
+
+The full evaluation workflow for a single model:
+
+```python
+from sklearn.metrics import (
+    precision_score,
+    recall_score,
+    f1_score,
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+)
+
+# Generate predictions on the held-out test set
+y_pred = model.predict(X_test)
+
+# Detailed per-class breakdown
+print(classification_report(y_test, y_pred, target_names=['Genuine', 'Fraud']))
+
+# Raw confusion matrix
+print(confusion_matrix(y_test, y_pred))
+
+# Scalar metrics
+print(f'Accuracy  : {accuracy_score(y_test, y_pred):.4f}')
+print(f'Precision : {precision_score(y_test, y_pred):.4f}')
+print(f'Recall    : {recall_score(y_test, y_pred):.4f}')
+print(f'F1-score  : {f1_score(y_test, y_pred):.4f}')
+```
+
+To compare all six classifiers in one pass:
+
+```python
+results = {}
+
+for name, clf in trained_models.items():
+    y_pred = clf.predict(X_test)
+    results[name] = {
+        'Accuracy' : accuracy_score(y_test, y_pred),
+        'Precision': precision_score(y_test, y_pred),
+        'Recall'   : recall_score(y_test, y_pred),
+        'F1'       : f1_score(y_test, y_pred),
+    }
+    print(f'\n── {name} ──')
+    print(classification_report(y_test, y_pred, target_names=['Genuine', 'Fraud']))
+    print(confusion_matrix(y_test, y_pred))
+
+# Tabular summary
+import pandas as pd
+print(pd.DataFrame(results).T.sort_values('F1', ascending=False))
+```
+
+## Classification Report
+
+`classification_report` prints a table with one row per class and three summary rows:
+
+```
+              precision    recall  f1-score   support
+
+     Genuine       0.99      1.00      0.99      9000
+       Fraud       0.97      0.94      0.95       492
+
+    accuracy                           0.99      9492
+   macro avg       0.98      0.97      0.97      9492
+weighted avg       0.99      0.99      0.99      9492
+```
+
+- **Per-class rows** — precision, recall, and F1 for each label independently.
+- **`macro avg`** — unweighted mean across classes; treats both classes as equally important regardless of size. This is the most informative summary when class balance matters.
+- **`weighted avg`** — mean weighted by class support (sample count); dominated by the majority class, so it can look artificially high.
+- **`support`** — number of true instances for each class in the test split.
+
+## Confusion Matrix
+
+The confusion matrix is a 2 × 2 grid that counts every combination of predicted and actual label:
+
+```
+                 Predicted Genuine    Predicted Fraud
+Actual Genuine        TN                  FP
+Actual Fraud          FN                  TP
+```
+
+In the fraud context each cell carries a specific business meaning:
+
+| Cell | Meaning | Business impact |
+|---|---|---|
+| **TP** (True Positive) | Fraud correctly flagged | Transaction blocked — financial loss prevented |
+| **TN** (True Negative) | Genuine transaction approved | No impact — correct outcome |
+| **FP** (False Positive) | Genuine transaction incorrectly flagged | Customer experience friction; potential chargeback overhead |
+| **FN** (False Negative) | Fraud missed entirely | Direct financial loss; reputational damage |
+
+A model with many FNs is dangerous in production — real fraud slips through undetected. A model with many FPs erodes customer trust by blocking legitimate purchases.
+
+<Tip>
+  **Prioritise recall for fraud detection**
+
+  In most production fraud systems the cost of a **False Negative** (missed fraud) far exceeds the cost of a **False Positive** (blocked legitimate transaction). A missed fraud causes an immediate financial loss and is difficult to reverse; a false alarm is an inconvenience that the cardholder can resolve with a phone call.
+
+  Concretely, this means you should:
+  - Select the final model primarily by **recall on the fraud class**, not by overall accuracy or even F1.
+  - Consider tuning the decision threshold below 0.5 to trade some precision for higher recall (`model.predict_proba(X_test)[:, 1] > threshold`).
+  - Report **macro-average F1** rather than weighted-average F1 in stakeholder summaries so the minority class carries equal weight.
+
+  See [Metrics Reference](/reference/metrics) for a deeper discussion of threshold tuning and cost-sensitive evaluation strategies.
+</Tip>
+
+For a full reference of all available metrics and their mathematical definitions, see the [Metrics Reference](/reference/metrics) page.

@@ -1,0 +1,75 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Financial Fraud Detection",
+  "projectDescription": "A supervised machine learning project that uses GANs for synthetic data generation and multiple classifiers (Random Forest, SVM, KNN, Naive Bayes, XGBoost, LightGBM) to detect fraudulent credit card transactions.",
+  "theme": "palm",
+  "primaryColor": "#fcb40b",
+  "lightColor": "#b08004",
+  "darkColor": "#040404",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Overview",
+        "pages": [
+          "introduction",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Concepts",
+        "pages": [
+          "concepts/dataset",
+          "concepts/class-imbalance",
+          "concepts/gan-architecture"
+        ]
+      },
+      {
+        "group": "Pipeline",
+        "pages": [
+          "pipeline/data-preprocessing",
+          "pipeline/gan-training",
+          "pipeline/model-training",
+          "pipeline/evaluation"
+        ]
+      },
+      {
+        "group": "Models",
+        "pages": [
+          "models/random-forest",
+          "models/svm",
+          "models/knn",
+          "models/naive-bayes",
+          "models/xgboost",
+          "models/lightgbm"
+        ]
+      },
+      {
+        "group": "Reference",
+        "pages": [
+          "reference/dependencies",
+          "reference/metrics"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "GAN-based synthetic fraud data generation to address class imbalance",
+    "PCA-based dimensionality reduction and visualization",
+    "Six supervised classifiers: Random Forest, SVM, KNN, Naive Bayes, XGBoost, LightGBM",
+    "Comprehensive evaluation with accuracy, precision, recall, and F1-score",
+    "End-to-end Jupyter Notebook workflow on real-world credit card dataset"
+  ],
+  "publicApiSurface": [
+    "build_generator() — builds the GAN generator model",
+    "build_discriminator() — builds the GAN discriminator model",
+    "build_gan(generator, discriminator) — combines generator and discriminator into a GAN",
+    "generate_synthetic_data(generator, num_samples) — generates synthetic fraud samples",
+    "monitor_generator(generator) — evaluates generator output via PCA visualization",
+    "RandomForestClassifier (sklearn)",
+    "SVC (sklearn)",
+    "KNeighborsClassifier (sklearn)",
+    "GaussianNB (sklearn)",
+    "xgb.XGBClassifier",
+    "lgb.LGBMClassifier"
+  ]
+}

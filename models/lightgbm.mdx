@@ -1,0 +1,102 @@
+---
+title: "LightGBM Gradient Boosting for Fast Fraud Classification"
+sidebarTitle: "LightGBM"
+description: "Use LightGBM's leaf-wise tree growth and histogram-based learning for efficient, high-performance fraud detection on large transaction datasets."
+---
+
+LightGBM (Light Gradient-Boosting Machine) is the sixth and final classifier in the FFD pipeline. Designed by Microsoft Research, it combines **histogram-based split finding** with a **leaf-wise tree growth** strategy to deliver training speeds significantly faster than XGBoost on large tabular datasets — while matching or exceeding its accuracy. On the GAN-augmented ~51k-sample credit card dataset it converges quickly and produces a compact, interpretable model.
+
+## How LightGBM Works
+
+LightGBM departs from classical gradient boosting in two important ways:
+
+### Histogram-based split finding
+Instead of sorting feature values at every node (O(n log n) per feature), LightGBM **bins** continuous features into at most `max_bin` (default 255) discrete histogram buckets at the start of training. Split candidates are evaluated by summing pre-computed gradient statistics per bucket — reducing the cost to O(max_bin) per feature per node, regardless of dataset size.
+
+### Leaf-wise tree growth
+Most boosting libraries grow trees **level-wise** (breadth-first), expanding all nodes at the same depth before moving deeper. LightGBM grows trees **leaf-wise** (best-first): at each step it expands the leaf that yields the largest loss reduction, regardless of depth. This means:
+
+- Fewer nodes are evaluated to achieve the same loss reduction.
+- Trees can be deeper and more asymmetric — capturing complex fraud sub-patterns efficiently.
+- The risk of overfitting is higher on small datasets; control with `num_leaves` and `min_child_samples`.
+
+Additional features relevant to FFD:
+
+- **GOSS (Gradient-based One-Side Sampling)** — keeps all high-gradient (informative) samples and a random subset of low-gradient ones, reducing data size without significant accuracy loss.
+- **EFB (Exclusive Feature Bundling)** — packs mutually exclusive features into a single bundle, reducing effective feature count.
+- **Native categorical feature support** — though the FFD dataset does not have categorical features, this matters for raw transaction data upstream of PCA.
+
+## Implementation
+
+The notebook instantiates `LGBMClassifier` with a fixed random seed and default hyperparameters:
+
+```python
+import lightgbm as lgb
+
+lgb_model = lgb.LGBMClassifier(random_state=42)
+lgb_model.fit(x_train, y_train)
+lgb_predictions = lgb_model.predict(x_test)
+```
+
+<Note>
+  LightGBM may emit verbose log output during training. Suppress it by passing
+  `verbosity=-1` to the constructor, or set the environment variable
+  `LIGHTGBM_VERBOSITY=-1` before importing the library.
+</Note>
+
+## Key Hyperparameters
+
+| Parameter | Default | Guidance |
+|---|---|---|
+| `n_estimators` | `100` | Number of boosting rounds. Combine with `early_stopping_rounds` on a validation set for automatic stopping. |
+| `num_leaves` | `31` | Maximum number of leaves per tree. The primary control for model complexity in leaf-wise growth. Keep `num_leaves < 2^max_depth`. |
+| `learning_rate` | `0.1` | Step-size shrinkage. Lower values (e.g. `0.05`) need more rounds but often generalise better. |
+| `min_child_samples` | `20` | Minimum samples required in a leaf. Raise to `50`–`100` to prevent leaves that contain only a handful of fraud transactions. |
+| `max_depth` | `-1` (unlimited) | Cap to `6`–`8` when `num_leaves` is large, to prevent excessively deep paths. |
+| `subsample` | `1.0` | Fraction of rows sampled per iteration (requires `subsample_freq > 0`). Values of `0.7`–`0.9` add useful stochasticity. |
+| `colsample_bytree` | `1.0` | Fraction of features sampled per tree. |
+| `is_unbalance` | `False` | Set to `True` to automatically weight the minority fraud class by the inverse class frequency ratio. |
+| `class_weight` | `None` | Alternative to `is_unbalance`: supply a dict e.g. `{0: 1, 1: 101}` for fine-grained control. |
+| `random_state` | `42` | Reproducibility seed used in the notebook. |
+
+## Evaluation
+
+```python
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+
+print(classification_report(y_test, lgb_predictions))
+print("Confusion matrix:\n", confusion_matrix(y_test, lgb_predictions))
+print("Accuracy :", accuracy_score(y_test, lgb_predictions))
+print("Precision:", precision_score(y_test, lgb_predictions))
+print("Recall   :", recall_score(y_test, lgb_predictions))
+print("F1       :", f1_score(y_test, lgb_predictions))
+```
+
+LightGBM typically achieves similar F1 on fraud to XGBoost but trains faster, making it the preferred choice when iterating quickly over hyperparameter searches or when the dataset is significantly larger than the FFD benchmark.
+
+<Tip>
+  **`is_unbalance=True` as a drop-in alternative to GAN augmentation:** If you
+  skip the GAN data augmentation step and train on the raw imbalanced dataset
+  (50,000 genuine vs 492 fraud), set `is_unbalance=True`. LightGBM will
+  automatically scale loss contributions so that the minority fraud class
+  receives proportionally more weight during gradient computation — similar in
+  spirit to XGBoost's `scale_pos_weight` but applied via a single boolean flag.
+</Tip>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Training Pipeline" href="/pipeline/evaluation" icon="diagram-project">
+    End-to-end pipeline: data loading, GAN augmentation, train/test split, and unified evaluation loop.
+  </Card>
+  <Card title="Metrics Reference" href="/reference/metrics" icon="chart-bar">
+    Definitions of accuracy, precision, recall, and F1 as used across all six FFD classifiers.
+  </Card>
+</CardGroup>

@@ -1,0 +1,199 @@
+---
+title: "GAN Architecture for Synthetic Fraud Data Generation"
+sidebarTitle: "GAN Architecture"
+description: "FFD uses a Generative Adversarial Network with TensorFlow/Keras to generate realistic synthetic fraud transactions, balancing the training dataset."
+---
+
+The core of the FFD pipeline's data balancing strategy is a **Generative Adversarial Network (GAN)** built with TensorFlow/Keras. The GAN is trained exclusively on the 492 real fraudulent transactions, and once converged, its generator produces synthetic fraud samples that are statistically indistinguishable from real ones. These synthetic samples are then merged with the original dataset to create a balanced training set for the downstream classifiers.
+
+## Adversarial Training — Generator vs. Discriminator
+
+The GAN framework pits two neural networks against each other in a minimax game:
+
+![GAN Architecture Diagram](https://developers.google.com/static/machine-learning/gan/images/gan_diagram.svg)
+
+- **Generator** — Takes a random noise vector as input and tries to produce synthetic fraud feature vectors realistic enough to fool the discriminator.
+- **Discriminator** — Takes a feature vector (either real fraud data or generator output) and tries to correctly classify it as real (`1`) or synthetic (`0`).
+
+Training proceeds in alternating steps: the discriminator is updated on a mix of real and fake samples, then the generator is updated by pushing the GAN's combined output toward the "real" label — gradually teaching the generator to improve its synthesis. Over many epochs, the generator learns the statistical distribution of real fraud transactions.
+
+<Note>
+  FFD requires **TensorFlow 2.11**. Install it with:
+  ```python
+  pip install tensorflow==2.11 visualkeras numpy pandas scikit-learn seaborn matplotlib plotly
+  ```
+  Other TensorFlow 2.x versions may work, but 2.11 is the version used during development and testing.
+</Note>
+
+## Generator Model
+
+The generator transforms a random noise vector into a synthetic feature vector of the same dimensionality as the real fraud data (29 features).
+
+```python
+def build_generator():
+    model = Sequential()
+    model.add(Dense(32, activation='relu', input_dim=29, kernel_initializer='he_uniform'))
+    model.add(BatchNormalization())
+
+    model.add(Dense(64, activation='relu'))
+    model.add(BatchNormalization())
+
+    model.add(Dense(128, activation='relu'))
+    model.add(BatchNormalization())
+
+    model.add(Dense(29, activation='linear'))
+    model.summary()
+    visualkeras.layered_view(model, legend=True, to_file='output1.png')
+
+    return model
+```
+
+**Architectural highlights:**
+
+| Layer | Output Shape | Notes |
+|-------|-------------|-------|
+| `Dense(32)` + `BatchNormalization` | `(None, 32)` | Entry point; `he_uniform` initializer; `relu` activation |
+| `Dense(64)` + `BatchNormalization` | `(None, 64)` | Expanding representation |
+| `Dense(128)` + `BatchNormalization` | `(None, 128)` | Peak capacity layer |
+| `Dense(29, linear)` | `(None, 29)` | Output layer; linear activation to match real data range |
+
+- **Input:** A noise vector of dimension 29 (matching the number of fraud features).
+- **`BatchNormalization`** after each hidden layer stabilises training by normalising intermediate activations, preventing vanishing/exploding gradients.
+- **Linear output activation** allows the generator to produce values across the full real-number range, matching the PCA-transformed fraud feature distribution.
+- Total trainable parameters: **15,581** (16,029 total including BatchNorm non-trainable).
+
+## Discriminator Model
+
+The discriminator is a binary classifier that distinguishes real fraud transactions from generator outputs.
+
+```python
+def build_discriminator():
+    model = Sequential()
+    model.add(Dense(32, activation='relu', input_dim=29, kernel_initializer='he_uniform'))
+
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(16, activation='relu'))
+
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(optimizer='adam', loss='binary_crossentropy')
+    visualkeras.layered_view(model, legend=True, to_file='output2.png')
+    model.summary()
+
+    return model
+```
+
+**Architectural highlights:**
+
+| Layer | Output Shape | Notes |
+|-------|-------------|-------|
+| `Dense(32)` | `(None, 32)` | Entry point; `he_uniform` initializer |
+| `Dense(64)` | `(None, 64)` | Widening hidden layer |
+| `Dense(32)` | `(None, 32)` | Compression |
+| `Dense(32)` | `(None, 32)` | Further refinement |
+| `Dense(16)` | `(None, 16)` | Bottleneck |
+| `Dense(1, sigmoid)` | `(None, 1)` | Binary output: real (≈1) vs. synthetic (≈0) |
+
+- **Optimizer:** Adam with `binary_crossentropy` loss — standard for binary classification.
+- **Sigmoid output** produces a probability score, enabling gradient-based feedback to the generator during GAN training.
+- Total parameters: **6,753** (all trainable).
+
+## Combined GAN
+
+The full GAN is assembled by stacking the generator and a frozen discriminator, so that only the generator's weights are updated during adversarial training.
+
+```python
+def build_gan(generator, discriminator):
+    discriminator.trainable = False
+    gan_input = Input(shape=generator.input_shape[1],)
+    x = generator(gan_input)
+    gan_output = discriminator(x)
+    gan = Model(gan_input, gan_output)
+    visualkeras.layered_view(gan, legend=True, to_file='output3.png')
+    gan.summary()
+    return gan
+```
+
+**Key design decisions:**
+
+- **`discriminator.trainable = False`** — Freezing the discriminator's weights inside the GAN model is essential. During GAN training, gradients flow back through the discriminator to update only the generator. If the discriminator were allowed to update simultaneously, both networks would chase a moving target and training would destabilise.
+- **`Input → Generator → Discriminator`** — The data flow is: random noise → generator produces synthetic features → discriminator scores them. The GAN is trained to push this score toward `1` (real), incentivising the generator to improve.
+- **GAN compilation** uses `optimizer='adam'` and `loss='binary_crossentropy'`.
+- Combined total parameters: **22,782**.
+
+## Training Process
+
+<Steps>
+  <Step title="Initialise models">
+    Instantiate the generator, discriminator, and combined GAN. Compile the GAN with Adam and binary cross-entropy loss.
+
+    ```python
+    generator = build_generator()
+    discriminator = build_discriminator()
+    gan = build_gan(generator, discriminator)
+    gan.compile(optimizer='adam', loss='binary_crossentropy')
+    ```
+  </Step>
+  <Step title="Configure training hyperparameters">
+    Set the number of epochs, batch size, and derive the half-batch size used for balanced real/fake training batches.
+
+    ```python
+    num_epochs = 1000
+    batch_size = 64
+    half_batch = int(batch_size / 2)  # 32
+    ```
+  </Step>
+  <Step title="Adversarial training loop">
+    Each epoch alternates between updating the discriminator on real and fake samples, then updating the generator via the frozen-discriminator GAN.
+
+    ```python
+    for epoch in range(num_epochs):
+        # Step 1 — Generate fake samples
+        x_fake = generate_synthetic_data(generator, half_batch)
+        y_fake = np.zeros((half_batch, 1))
+
+        # Step 2 — Sample real fraud transactions
+        x_real = data_fraud.drop("Class", axis=1).sample(half_batch)
+        y_real = np.ones((half_batch, 1))
+
+        # Step 3 — Train discriminator (unfrozen) on real + fake
+        discriminator.trainable = True
+        discriminator.train_on_batch(x_real, y_real)
+        discriminator.train_on_batch(x_fake, y_fake)
+
+        # Step 4 — Train generator via frozen-discriminator GAN
+        noise = np.random.normal(0, 1, (batch_size, 29))
+        gan.train_on_batch(noise, np.ones((batch_size, 1)))
+
+        # Step 5 — Monitor every 10 epochs
+        if epoch % 10 == 0:
+            monitor_generator(generator)
+    ```
+  </Step>
+  <Step title="Monitor with PCA scatter plots">
+    Every 10 epochs, `monitor_generator()` projects real and synthetic fraud data to 2D via PCA and renders a scatter plot. Convergence is visible when the two clusters overlap closely.
+  </Step>
+  <Step title="Generate final synthetic dataset">
+    After training completes, generate 492 synthetic fraud samples and merge them with the real dataset for classifier training.
+
+    ```python
+    synthetic_data = generate_synthetic_data(generator, 492)
+    ```
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Generator" icon="wand-magic-sparkles">
+    Learns to map 29-dim noise → realistic fraud features over 1,000 epochs
+  </Card>
+  <Card title="Discriminator" icon="shield-halved">
+    Binary classifier that drives generator improvement through adversarial loss
+  </Card>
+  <Card title="Training epochs" icon="rotate">
+    **1,000 epochs**, batch size 64 (half-batch 32 real + 32 fake per discriminator update)
+  </Card>
+  <Card title="Monitoring" icon="chart-scatter">
+    PCA scatter plot every **10 epochs** to visualise real vs. synthetic fraud distribution
+  </Card>
+</CardGroup>

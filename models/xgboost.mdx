@@ -1,0 +1,98 @@
+---
+title: "XGBoost Gradient Boosting Classifier for Fraud Detection"
+sidebarTitle: "XGBoost"
+description: "Train an XGBoost classifier using gradient-boosted trees with regularization to detect fraud patterns in the augmented transaction dataset."
+---
+
+XGBoost (eXtreme Gradient Boosting) is a high-performance gradient-boosted tree library that is routinely state-of-the-art on structured/tabular data — the category that credit card transaction datasets firmly belong to. In the FFD pipeline, `xgb.XGBClassifier` is trained on the GAN-augmented dataset of ~51k samples and 29 PCA features, exploiting its built-in regularisation to learn sharp, fraud-specific decision boundaries without overfitting.
+
+## How XGBoost Works
+
+XGBoost is a **sequential ensemble** method: each new tree is trained to correct the residual errors of the combined model so far. Formally it minimises an objective that adds a differentiable loss term plus explicit regularisation:
+
+```
+Obj = Σ l(yᵢ, ŷᵢ) + Σ Ω(fₖ)
+```
+
+where `Ω(f) = γ·T + ½λ·||w||²` penalises tree complexity (number of leaves `T`) and leaf weight magnitude (L2 penalty `λ`). An optional L1 penalty `α` can also be added.
+
+Key differentiators from standard gradient boosting:
+
+- **L1/L2 regularisation** on leaf weights — reduces variance and is rarely seen in classical GBDT frameworks.
+- **Second-order gradient statistics** — uses both gradient and Hessian of the loss for more accurate step sizes.
+- **Handles missing values natively** — learns the optimal default direction for each split when a feature value is absent.
+- **Column (feature) subsampling** — analogous to Random Forest's feature randomisation; improves generalisation.
+- **Parallelised tree construction** — split finding is parallelised across features, making training fast despite the sequential boosting.
+
+## Implementation
+
+The notebook instantiates `XGBClassifier` with a fixed random seed and all other parameters at their library defaults:
+
+```python
+import xgboost as xgb
+
+xgb_model = xgb.XGBClassifier(random_state=42)
+xgb_model.fit(x_train, y_train)
+xgb_predictions = xgb_model.predict(x_test)
+```
+
+<Note>
+  XGBoost uses `random_state` (scikit-learn API) which is internally mapped to
+  the `seed` parameter. Fixing it ensures that the column-subsampling
+  randomisation is reproducible across runs.
+</Note>
+
+## Key Hyperparameters
+
+| Parameter | Default | Guidance |
+|---|---|---|
+| `n_estimators` | `100` | Number of boosting rounds. More rounds → lower bias; combine with `early_stopping_rounds` to avoid overfitting. |
+| `max_depth` | `6` | Maximum depth of each tree. Shallower trees (`3`–`5`) generalise better on small fraud clusters. |
+| `learning_rate` | `0.3` | Step size shrinkage. Lower values (e.g. `0.05`) require more estimators but often generalise better. |
+| `subsample` | `1.0` | Fraction of training samples used per boosting round. Values `0.7`–`0.9` add stochasticity and reduce overfitting. |
+| `colsample_bytree` | `1.0` | Fraction of features sampled per tree. `0.7`–`0.9` is a common starting point. |
+| `reg_alpha` | `0` | L1 regularisation on leaf weights. Increase to drive sparse feature usage. |
+| `reg_lambda` | `1` | L2 regularisation on leaf weights. Increase to reduce leaf weight magnitude. |
+| `scale_pos_weight` | `1` | Ratio of negative to positive class counts. Set to `num_genuine / num_fraud ≈ 101` when training on the raw imbalanced dataset. |
+| `random_state` | `42` | Reproducibility seed used in the notebook. |
+
+## Evaluation
+
+```python
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+
+print(classification_report(y_test, xgb_predictions))
+print("Confusion matrix:\n", confusion_matrix(y_test, xgb_predictions))
+print("Accuracy :", accuracy_score(y_test, xgb_predictions))
+print("Precision:", precision_score(y_test, xgb_predictions))
+print("Recall   :", recall_score(y_test, xgb_predictions))
+print("F1       :", f1_score(y_test, xgb_predictions))
+```
+
+XGBoost typically achieves among the highest F1 scores on the fraud class in the FFD benchmark. Inspect the confusion matrix to confirm that recall on Class 1 (fraud) meets your operational threshold.
+
+<Tip>
+  **Handling imbalance without GAN augmentation:** If you skip the GAN
+  augmentation step and train on the raw dataset (50,000 genuine vs 492 fraud),
+  set `scale_pos_weight = 50000 / 492 ≈ 101`. This tells XGBoost to treat each
+  fraud sample as equivalent to ~101 genuine samples during gradient computation,
+  producing a decision boundary that strongly penalises missed fraud cases.
+</Tip>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Training Pipeline" href="/pipeline/evaluation" icon="diagram-project">
+    End-to-end pipeline: data loading, GAN augmentation, train/test split, and unified evaluation loop.
+  </Card>
+  <Card title="Metrics Reference" href="/reference/metrics" icon="chart-bar">
+    Definitions of accuracy, precision, recall, and F1 as used across all six FFD classifiers.
+  </Card>
+</CardGroup>

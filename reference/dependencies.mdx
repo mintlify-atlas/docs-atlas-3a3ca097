@@ -1,0 +1,120 @@
+---
+title: "FFD Dependencies: Libraries and Version Requirements"
+sidebarTitle: "Dependencies"
+description: "Complete list of Python libraries required to run the Financial Fraud Detection pipeline, including TensorFlow, scikit-learn, XGBoost, LightGBM, and visualization tools."
+---
+
+The Financial Fraud Detection (FFD) pipeline draws on a focused stack of data science, deep learning, and visualization libraries. The GAN-based data augmentation layer relies on **TensorFlow 2.11** with its Keras API, while the six supervised classifiers are provided by **scikit-learn**, **XGBoost**, and **LightGBM**. Visualization of results and network architecture is handled by **Matplotlib**, **Seaborn**, **Plotly**, and **visualkeras**. The pipeline requires **Python 3.8 or later**; Python 3.10 was used during development.
+
+---
+
+## Installation
+
+Install all required packages in a single command, or use the separate pinned-version command for TensorFlow to avoid resolver conflicts.
+
+<CodeGroup>
+
+```bash Full install (recommended)
+pip install tensorflow==2.11 visualkeras numpy pandas scikit-learn seaborn matplotlib plotly xgboost lightgbm
+```
+
+```bash Step-by-step (if resolver conflicts occur)
+pip install tensorflow==2.11
+pip install visualkeras numpy pandas scikit-learn seaborn matplotlib plotly xgboost lightgbm
+```
+
+</CodeGroup>
+
+<Warning>
+  **TensorFlow is pinned to `==2.11`.** The GAN architecture and Keras API calls in this notebook were written against TensorFlow 2.11. Newer major versions (2.12+, and especially the TensorFlow 2.16 / Keras 3 split) introduce breaking API changes — for example, the `tensorflow.keras` import path and the `Adam` optimizer signature differ in later releases. Do not upgrade TensorFlow without auditing every `tf.keras` call in the notebook first.
+</Warning>
+
+---
+
+## Core Dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `tensorflow` | `==2.11` | GAN model building and training via the Keras API |
+| `visualkeras` | latest | Neural network architecture visualization |
+| `numpy` | latest | Numerical computing and array operations |
+| `pandas` | latest | Dataset loading, manipulation, and inspection |
+| `scikit-learn` | latest | Preprocessing, classifiers, evaluation metrics, and data splitting |
+| `xgboost` | latest | XGBoost gradient-boosted tree classifier |
+| `lightgbm` | latest | LightGBM gradient-boosted tree classifier |
+| `seaborn` | latest | Statistical data visualization (heatmaps, distribution plots) |
+| `matplotlib` | latest | General-purpose plotting and figure generation |
+| `plotly` | latest | Interactive visualizations (scatter plots, class distribution) |
+
+<Note>
+  All packages except `tensorflow` and `visualkeras` are installed at their latest stable release. If you need a fully reproducible environment, pin every package to the version resolved during your first install by running `pip freeze > requirements.txt` after the initial setup.
+</Note>
+
+---
+
+## TensorFlow / Keras Modules Used
+
+The GAN generator, discriminator, and combined model are assembled entirely through the `tensorflow.keras` API. The following sub-modules are imported by the notebook:
+
+<CardGroup cols={2}>
+  <Card title="tensorflow.keras.layers" icon="layer-group">
+    - `Input` — defines the input tensor shape
+    - `Dense` — fully connected layer
+    - `BatchNormalization` — stabilizes GAN training
+    - `LeakyReLU` — activation function for generator/discriminator
+    - `Dropout` — regularization to reduce overfitting
+  </Card>
+  <Card title="tensorflow.keras.models" icon="diagram-project">
+    - `Model` — functional API model container (GAN assembly)
+    - `Sequential` — sequential model container (classifier heads)
+  </Card>
+  <Card title="tensorflow.keras.optimizers" icon="bolt">
+    - `Adam` — adaptive optimizer used for both generator and discriminator training
+  </Card>
+  <Card title="tensorflow.keras.initializers" icon="sliders">
+    - `RandomNormal` — weight initializer for GAN layers, controls initial weight distribution
+  </Card>
+</CardGroup>
+
+```python
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Dense, BatchNormalization, LeakyReLU, Dropout
+from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.initializers import RandomNormal
+```
+
+---
+
+## scikit-learn Modules
+
+scikit-learn provides the complete preprocessing, classification, and evaluation infrastructure for FFD. The table below maps each imported module to its role in the pipeline:
+
+| Module | Imported Symbol | Role |
+|---|---|---|
+| `sklearn.preprocessing` | `StandardScaler` | Standardizes features to zero mean and unit variance before model training |
+| `sklearn.decomposition` | `PCA` | Reduces feature dimensionality for visualization and GAN input |
+| `sklearn.utils` | `shuffle` | Randomly shuffles combined real + synthetic data before training |
+| `sklearn.ensemble` | `RandomForestClassifier` | Ensemble tree-based classifier |
+| `sklearn.svm` | `SVC` | Support Vector Machine classifier |
+| `sklearn.neighbors` | `KNeighborsClassifier` | K-Nearest Neighbours classifier |
+| `sklearn.naive_bayes` | `GaussianNB` | Gaussian Naive Bayes classifier |
+| `sklearn.metrics` | `accuracy_score`, `precision_score`, `recall_score`, `f1_score`, `classification_report`, `confusion_matrix` | Full suite of binary classification evaluation metrics |
+| `sklearn.model_selection` | `train_test_split` | Splits dataset into training and test sets |
+
+```python
+from sklearn.utils import shuffle
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.model_selection import train_test_split
+```
+
+<Note>
+  XGBoost and LightGBM are imported directly via their own packages (`import xgboost as xgb`, `import lightgbm as lgb`) rather than through scikit-learn wrappers, though both expose a scikit-learn-compatible `fit` / `predict` interface.
+</Note>

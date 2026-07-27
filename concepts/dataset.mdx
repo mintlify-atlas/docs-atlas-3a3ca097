@@ -1,0 +1,75 @@
+---
+title: "Credit Card Transaction Dataset: Features and Structure"
+sidebarTitle: "Dataset"
+description: "The FFD dataset contains 50,492 anonymized credit card transactions with 31 features including 28 PCA-transformed variables and a binary fraud label."
+---
+
+The FFD project is built on a publicly available credit card transaction dataset hosted on [Kaggle](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud). It contains **50,492 real-world transactions** made by European cardholders, each labelled as either genuine or fraudulent. The dataset is widely used in the machine learning community as a benchmark for fraud detection, and it presents a classic extreme class imbalance challenge that the FFD pipeline directly addresses through GAN-based data synthesis.
+
+## Dataset Structure
+
+The dataset has **50,492 rows and 31 columns**. Each row represents one transaction, and the columns are as follows:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `Time` | Float | Seconds elapsed between this transaction and the first transaction in the dataset |
+| `V1` – `V28` | Float | PCA-transformed anonymized features (original names are confidential) |
+| `Amount` | Float | Transaction amount in euros |
+| `Class` | Integer | Target label: `0` = genuine transaction, `1` = fraudulent transaction |
+
+### Shape
+
+```python
+data.shape
+# (50492, 31)
+```
+
+### Class Distribution
+
+```python
+data.Class.value_counts()
+# 0    50000
+# 1      492
+# Name: Class, dtype: int64
+```
+
+<Note>
+  The 28 PCA-transformed features (`V1`–`V28`) are the result of a dimensionality reduction applied to the original transaction attributes, which remain confidential for privacy reasons. Only `Time` and `Amount` retain their original, interpretable values.
+</Note>
+
+### Loading the Dataset
+
+```python
+import pandas as pd
+
+data = pd.read_csv('Creditcard_dataset.csv')
+```
+
+## Class Imbalance at a Glance
+
+The dataset contains **50,000 genuine transactions** (Class = 0) and only **492 fraudulent transactions** (Class = 1), making fraud just ~0.975% of all records. This severe imbalance means a naive model can achieve over 99% accuracy by simply predicting every transaction as genuine — while completely failing to detect any actual fraud.
+
+<CardGroup cols={2}>
+  <Card title="Genuine Transactions" icon="circle-check">
+    **50,000** labelled `Class = 0`
+  </Card>
+  <Card title="Fraudulent Transactions" icon="triangle-exclamation">
+    **492** labelled `Class = 1`
+  </Card>
+</CardGroup>
+
+The FFD pipeline resolves this imbalance by training a Generative Adversarial Network (GAN) to synthesize 492 additional realistic fraud samples, bringing the training ratio closer to 1:1. See [Class Imbalance](/concepts/class-imbalance) for the full explanation.
+
+## Accessing the Dataset
+
+<Steps>
+  <Step title="Download from Kaggle">
+    Visit the [Credit Card Fraud Detection dataset page](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) on Kaggle and download `creditcard.csv`. A free Kaggle account is required.
+  </Step>
+  <Step title="Rename and place in the repo root">
+    Rename the downloaded file to `Creditcard_dataset.csv` and place it in the root of the cloned FFD repository alongside `Design_Project.ipynb`.
+  </Step>
+  <Step title="Verify the load">
+    Open the notebook and run the data-loading cell to confirm `data.shape` returns `(50492, 31)`.
+  </Step>
+</Steps>

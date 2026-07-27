@@ -1,0 +1,93 @@
+---
+title: "Random Forest Classifier for Credit Card Fraud Detection"
+sidebarTitle: "Random Forest"
+description: "Train a Random Forest ensemble on augmented fraud data. Random Forest builds multiple decision trees and aggregates votes for robust fraud classification."
+---
+
+Random Forest is one of the most reliable ensemble classifiers for fraud detection. In the FFD pipeline, it is trained on the GAN-augmented dataset — 50,000 genuine transactions and approximately 984 synthetic/real fraud samples — using 29 PCA-derived features (V1–V28 plus scaled Amount). By constructing many decorrelated decision trees in parallel and combining their votes, Random Forest generalises well even when the minority fraud class is rare.
+
+## How Random Forest Works
+
+Random Forest is a **bagging** (bootstrap aggregating) ensemble method. During training it:
+
+1. Draws `n_estimators` bootstrap samples from the training set.
+2. Grows a full decision tree on each sample, but at every split considers only a random subset of features (`max_features`). This decorrelates the trees.
+3. At inference time every tree casts a vote and the **majority class** is returned.
+
+Key strengths in a fraud-detection context:
+
+- **Handles class imbalance** — even without GAN augmentation, the `class_weight` parameter can up-weight the minority fraud class automatically.
+- **Built-in feature importance** — after fitting, `rf_model.feature_importances_` reveals which PCA components drive the fraud signal most strongly.
+- **Low variance** — averaging many trees reduces the overfitting that a single deep decision tree would suffer on noisy financial data.
+
+## Implementation
+
+The notebook instantiates Random Forest with 100 trees and a fixed random seed for reproducibility:
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(x_train, y_train)
+rf_predictions = rf_model.predict(x_test)
+```
+
+<Note>
+  The FFD pipeline uses lowercase `x_train` / `x_test` variable names (the
+  post-GAN augmented splits). Make sure your preprocessing step exports
+  variables with the same names before calling `fit`.
+</Note>
+
+## Key Hyperparameters
+
+| Parameter | Default | Guidance |
+|---|---|---|
+| `n_estimators` | `100` | More trees → lower variance; diminishing returns above ~200. Notebook uses `100`. |
+| `max_depth` | `None` (fully grown) | Cap depth to reduce overfitting on small fraud clusters. |
+| `min_samples_split` | `2` | Raise to `5`–`10` to avoid leaf nodes with a single fraud transaction. |
+| `max_features` | `"sqrt"` | Default `"sqrt"` works well for binary classification. |
+| `class_weight` | `None` | Set to `"balanced"` or `{0: 1, 1: 101}` when training on the raw imbalanced dataset. |
+| `random_state` | `42` | Fixed seed for reproducible splits. Notebook uses `42`. |
+
+## Evaluation
+
+After generating predictions, compute the full suite of metrics used across all FFD classifiers:
+
+```python
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+
+print(classification_report(y_test, rf_predictions))
+print("Confusion matrix:\n", confusion_matrix(y_test, rf_predictions))
+print("Accuracy :", accuracy_score(y_test, rf_predictions))
+print("Precision:", precision_score(y_test, rf_predictions))
+print("Recall   :", recall_score(y_test, rf_predictions))
+print("F1       :", f1_score(y_test, rf_predictions))
+```
+
+The `classification_report` prints per-class precision, recall, and F1 for both Class 0 (genuine) and Class 1 (fraud), making it easy to assess recall on the minority fraud class.
+
+<Tip>
+  If you are **not** using GAN augmentation and working with the raw imbalanced
+  dataset (50,000 genuine vs 492 fraud), set `class_weight="balanced"` in the
+  constructor. This instructs scikit-learn to weight each class inversely
+  proportional to its frequency, giving fraud samples roughly 101× more
+  influence per sample during tree construction.
+</Tip>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Training Pipeline" href="/pipeline/evaluation" icon="diagram-project">
+    End-to-end pipeline: data loading, GAN augmentation, train/test split, and unified evaluation loop.
+  </Card>
+  <Card title="Metrics Reference" href="/reference/metrics" icon="chart-bar">
+    Definitions of accuracy, precision, recall, and F1 as used across all six FFD classifiers.
+  </Card>
+</CardGroup>

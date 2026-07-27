@@ -1,0 +1,94 @@
+---
+title: "Financial Fraud Detection: ML Pipeline for Credit Card Fraud"
+sidebarTitle: "Introduction"
+description: "FFD is a supervised ML project that detects credit card fraud using GAN-augmented data and six classifiers. Learn about the architecture and approach."
+---
+
+Financial Fraud Detection (FFD) is an end-to-end machine learning pipeline that identifies fraudulent credit card transactions. The project tackles one of the most persistent challenges in applied ML — extreme class imbalance — by combining a Generative Adversarial Network (GAN) with six supervised classifiers to produce a robust, high-accuracy fraud detector.
+
+## The Challenge of Fraud Detection
+
+Real-world fraud datasets are inherently imbalanced. In the FFD dataset, only **492 out of 50,492 transactions** are fraudulent — roughly **0.97% of all records**. A naïve model that predicts "genuine" for every transaction would achieve over 99% accuracy while completely failing at its core purpose.
+
+| Class | Count | Share |
+|-------|-------|-------|
+| Genuine (0) | 50,000 | ~99.03% |
+| Fraudulent (1) | 492 | ~0.97% |
+
+To counteract this imbalance, FFD trains a **GAN** on the 492 real fraud examples. The generator learns the statistical distribution of fraudulent transactions and synthesizes 492 additional samples. These synthetic fraud examples are then combined with the real dataset before classifiers are trained, giving each model a balanced signal to learn from.
+
+## Pipeline Overview
+
+The FFD notebook (`Design_Project.ipynb`) walks through a sequential seven-step pipeline:
+
+1. **Import dependencies** — Load all required libraries (TensorFlow/Keras, scikit-learn, XGBoost, LightGBM, and visualization tools).
+2. **Load dataset** — Read `Creditcard_dataset.csv` into a pandas DataFrame and inspect its shape and class distribution.
+3. **Data preprocessing** — Drop rows with `NaN` values, remove the `Time` column, apply `StandardScaler` to `Amount`, split features (`V1`–`V28` + `Amount`) from the label (`Class`), and visualize the data with PCA.
+4. **Build the generator** — Define `build_generator()`, a neural network that maps random noise to synthetic fraud feature vectors using TensorFlow/Keras.
+5. **Build the discriminator** — Define `build_discriminator()`, a binary classifier that learns to distinguish real from synthetic fraud records.
+6. **Assemble the GAN** — Combine generator and discriminator into a full GAN via `build_gan(generator, discriminator)` and compile with `adam` / `binary_crossentropy`.
+7. **Train the GAN, generate data, train classifiers, evaluate** — Run 1,000 training epochs, monitor generator quality with PCA via `monitor_generator()`, generate 492 synthetic fraud samples with `generate_synthetic_data(generator, 492)`, train all six classifiers on the augmented dataset, and evaluate each with classification reports and confusion matrices.
+
+## Classifiers
+
+FFD trains and evaluates six supervised classifiers on the combined real + synthetic dataset:
+
+<CardGroup cols={2}>
+  <Card
+    title="Random Forest"
+    icon="tree"
+    href="models/random-forest"
+  >
+    An ensemble of 100 decision trees (`n_estimators=100`) with majority-vote predictions. Robust to outliers and highly interpretable via feature importances.
+  </Card>
+  <Card
+    title="Support Vector Machine"
+    icon="border-all"
+    href="models/svm"
+  >
+    An RBF-kernel SVM (`kernel='rbf', gamma='scale'`) that finds the maximum-margin hyperplane separating genuine from fraudulent transactions.
+  </Card>
+  <Card
+    title="K-Nearest Neighbors"
+    icon="circle-nodes"
+    href="models/knn"
+  >
+    A distance-based classifier (`n_neighbors=5`) that labels each transaction by majority vote among its five nearest neighbors in feature space.
+  </Card>
+  <Card
+    title="Naive Bayes"
+    icon="chart-simple"
+    href="models/naive-bayes"
+  >
+    A `GaussianNB` classifier that applies Bayes' theorem with the assumption of Gaussian-distributed, conditionally independent features.
+  </Card>
+  <Card
+    title="XGBoost"
+    icon="bolt"
+    href="models/xgboost"
+  >
+    A gradient-boosted tree ensemble (`XGBClassifier`) known for high accuracy and speed on tabular data, with built-in regularization.
+  </Card>
+  <Card
+    title="LightGBM"
+    icon="gauge-high"
+    href="models/lightgbm"
+  >
+    A histogram-based gradient boosting framework (`LGBMClassifier`) optimized for large datasets with fast training and low memory usage.
+  </Card>
+</CardGroup>
+
+## Tech Stack
+
+| Package | Version / Notes |
+|---------|-----------------|
+| `tensorflow` | `==2.11` — required for Keras API compatibility |
+| `scikit-learn` | Preprocessing, classifiers, and evaluation metrics |
+| `xgboost` | `XGBClassifier` for gradient-boosted trees |
+| `lightgbm` | `LGBMClassifier` for histogram-based boosting |
+| `pandas` | DataFrame operations and CSV I/O |
+| `numpy` | Numerical computations and array handling |
+| `seaborn` | Confusion matrix heatmaps |
+| `matplotlib` | General-purpose plotting |
+| `plotly` | Interactive scatter plots for PCA visualization |
+| `visualkeras` | Neural network architecture diagrams |

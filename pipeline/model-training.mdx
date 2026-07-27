@@ -1,0 +1,115 @@
+---
+title: "Training Six Fraud Detection Classifiers on Augmented Data"
+sidebarTitle: "Model Training"
+description: "Combine real and GAN-generated fraud data, then train Random Forest, SVM, KNN, Naive Bayes, XGBoost, and LightGBM classifiers."
+---
+
+With synthetic fraud samples produced by the GAN, the pipeline combines them with the original transaction data to create a balanced training set. Six diverse classifiers — spanning ensemble methods, kernel methods, instance-based learning, probabilistic models, and gradient boosting — are then trained on this augmented dataset so their results can be compared fairly under identical conditions.
+
+## Combining Real and Synthetic Data
+
+The GAN output (synthetic fraud transactions) is concatenated with the original genuine and real fraud samples. Both feature arrays and label vectors are stacked, and the combined dataset is **shuffled** before any splitting or training occurs:
+
+```python
+import numpy as np
+import pandas as pd
+from sklearn.utils import shuffle
+
+# Separate real fraud and genuine transactions
+X_real_fraud   = X[y == 1].values
+X_genuine      = X[y == 0].values
+y_real_fraud   = y[y == 1].values
+y_genuine      = y[y == 0].values
+
+# Stack real fraud + synthetic fraud
+X_fraud_all = np.vstack([X_real_fraud, synthetic_fraud])
+y_fraud_all = np.ones(len(X_fraud_all), dtype=int)
+
+# Build the full balanced dataset
+X_combined = np.vstack([X_genuine, X_fraud_all])
+y_combined = np.concatenate([y_genuine, y_fraud_all])
+
+# Shuffle to remove any ordering artefacts
+X_combined, y_combined = shuffle(X_combined, y_combined, random_state=42)
+```
+
+## Train / Test Split
+
+The combined and shuffled dataset is divided into training and test subsets using scikit-learn's `train_test_split`. A fixed `random_state` guarantees reproducibility across all six models:
+
+```python
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_combined, y_combined,
+    test_size=0.2,
+    random_state=42,
+    stratify=y_combined      # preserve class ratio in both splits
+)
+
+print(f'Training samples : {X_train.shape[0]}')
+print(f'Test samples     : {X_test.shape[0]}')
+```
+
+## Training the Classifiers
+
+Each of the six classifiers is trained on the same `(X_train, y_train)` split so that evaluation results are directly comparable. Explore the individual model pages for architecture details, hyperparameter choices, and per-model performance breakdowns:
+
+<CardGroup cols={2}>
+  <Card title="Random Forest" icon="tree" href="/models/random-forest">
+    An ensemble of decision trees that reduces variance through bagging and random feature subsampling.
+  </Card>
+  <Card title="SVM" icon="circle-dot" href="/models/svm">
+    Support Vector Machine with an RBF kernel that finds the maximum-margin hyperplane separating fraud from genuine transactions.
+  </Card>
+  <Card title="KNN" icon="circle-nodes" href="/models/knn">
+    K-Nearest Neighbours classifies each test sample by majority vote among its K closest training points.
+  </Card>
+  <Card title="Naive Bayes" icon="chart-bar" href="/models/naive-bayes">
+    Gaussian Naive Bayes models each feature as an independent Gaussian distribution conditioned on the class label.
+  </Card>
+  <Card title="XGBoost" icon="bolt" href="/models/xgboost">
+    Extreme Gradient Boosting builds an additive ensemble of shallow trees with regularisation to prevent overfitting.
+  </Card>
+  <Card title="LightGBM" icon="feather" href="/models/lightgbm">
+    Light Gradient Boosting Machine uses histogram-based splits and leaf-wise growth for fast, memory-efficient training.
+  </Card>
+</CardGroup>
+
+The training call follows the same pattern for every classifier:
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+import xgboost as xgb
+import lightgbm as lgb
+
+# Instantiate all six classifiers
+models = {
+    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
+    'SVM':           SVC(kernel='rbf', probability=True, random_state=42),
+    'KNN':           KNeighborsClassifier(n_neighbors=5),
+    'Naive Bayes':   GaussianNB(),
+    'XGBoost':       xgb.XGBClassifier(use_label_encoder=False,
+                                        eval_metric='logloss',
+                                        random_state=42),
+    'LightGBM':      lgb.LGBMClassifier(random_state=42),
+}
+
+# Train every classifier on the augmented dataset
+trained_models = {}
+for name, clf in models.items():
+    clf.fit(X_train, y_train)
+    trained_models[name] = clf
+    print(f'✓ {name} trained')
+```
+
+<Note>
+  **Why shuffle before training?**
+
+  After concatenation the dataset is ordered — all genuine transactions come first, followed by real fraud, followed by synthetic fraud. Feeding this ordered array directly into `train_test_split` (even with `stratify`) or into an online learner would introduce **ordering bias**: the model would see only one class for long stretches, disrupting gradient updates in neural components and distorting cross-validation folds.
+
+  Calling `shuffle` before splitting ensures that every mini-batch and every fold contains a representative mix of both classes, leading to more stable training and unbiased evaluation.
+</Note>

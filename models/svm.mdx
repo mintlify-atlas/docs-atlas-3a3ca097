@@ -1,0 +1,89 @@
+---
+title: "Support Vector Machine for Fraud Classification"
+sidebarTitle: "SVM"
+description: "Apply SVC (Support Vector Classification) to find the optimal hyperplane separating genuine and fraudulent transactions in high-dimensional feature space."
+---
+
+Support Vector Classification (SVC) approaches fraud detection as a geometric problem: find the hyperplane in the 29-dimensional PCA feature space that **maximises the margin** between genuine transactions (Class 0) and fraudulent ones (Class 1). The GAN-augmented training set gives the model roughly equal exposure to both classes during margin optimisation, enabling the decision boundary to sit comfortably between the two distributions rather than collapsing toward the majority class.
+
+## How SVM Works
+
+SVC solves a **quadratic optimisation problem** to find the support vectors — the training examples closest to the decision boundary — and then maximises the distance (margin) between the boundary and each class.
+
+For the FFD dataset, which contains non-linear fraud patterns in high-dimensional PCA space, the **Radial Basis Function (RBF) kernel** maps samples into an implicit infinite-dimensional space where a linear hyperplane can separate them. The key concepts are:
+
+- **C (regularisation)** — trades margin width against training-set misclassification. A smaller C allows a wider, softer margin; a larger C penalises misclassifications more heavily.
+- **Kernel trick** — transforms input features without explicitly computing the mapping, making non-linear boundaries computationally feasible.
+- **`gamma='scale'`** — scales the RBF kernel width by `1 / (n_features × X.var())`, a robust default for standardised PCA features.
+
+<Note>
+  SVM finds the **globally optimal** maximum-margin hyperplane for the training
+  set, which gives strong generalisation guarantees — but this comes at the cost
+  of O(n²)–O(n³) training time, making it the slowest classifier in the FFD
+  pipeline on the full augmented dataset.
+</Note>
+
+## Implementation
+
+The notebook uses an RBF kernel with `gamma='scale'` and a fixed random seed:
+
+```python
+from sklearn.svm import SVC
+
+svm_model = SVC(kernel='rbf', gamma='scale', random_state=42)
+svm_model.fit(x_train, y_train)
+svm_predictions = svm_model.predict(x_test)
+```
+
+## Key Hyperparameters
+
+| Parameter | Notebook value | Guidance |
+|---|---|---|
+| `C` | `1.0` (default) | Increase to `10`–`100` if recall on fraud is too low; decrease to reduce overfitting. |
+| `kernel` | `'rbf'` | `'rbf'` handles non-linear boundaries; `'linear'` is faster but may underfit complex fraud patterns. |
+| `gamma` | `'scale'` | `'scale'` is a robust default; `'auto'` uses `1/n_features` instead. |
+| `class_weight` | `None` | Set to `'balanced'` when training on the raw imbalanced dataset. |
+| `probability` | `False` | Set to `True` to enable `predict_proba()` for threshold tuning, at a small speed cost. |
+| `random_state` | `42` | Controls randomisation in the probability estimation shuffle. |
+
+## Evaluation
+
+```python
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+)
+
+print(classification_report(y_test, svm_predictions))
+print("Confusion matrix:\n", confusion_matrix(y_test, svm_predictions))
+print("Accuracy :", accuracy_score(y_test, svm_predictions))
+print("Precision:", precision_score(y_test, svm_predictions))
+print("Recall   :", recall_score(y_test, svm_predictions))
+print("F1       :", f1_score(y_test, svm_predictions))
+```
+
+Pay particular attention to **recall** for Class 1 (fraud). A high-margin SVM may achieve very high accuracy by correctly classifying nearly all genuine transactions while still missing a significant fraction of the rare fraud cases.
+
+<Note>
+  **Computational cost:** SVC with an RBF kernel scales as O(n²) in memory and
+  O(n² · d) in time, where n is the number of training samples and d the number
+  of features. On the ~51k-sample GAN-augmented dataset this is manageable, but
+  training is noticeably slower than Random Forest or the gradient-boosting
+  methods. If speed is critical, consider `sklearn.svm.LinearSVC`, which uses a
+  liblinear solver and scales as O(n · d).
+</Note>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Training Pipeline" href="/pipeline/evaluation" icon="diagram-project">
+    End-to-end pipeline: data loading, GAN augmentation, train/test split, and unified evaluation loop.
+  </Card>
+  <Card title="Metrics Reference" href="/reference/metrics" icon="chart-bar">
+    Definitions of accuracy, precision, recall, and F1 as used across all six FFD classifiers.
+  </Card>
+</CardGroup>

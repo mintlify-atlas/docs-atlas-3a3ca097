@@ -1,0 +1,174 @@
+---
+title: "GAN Training: Generating Synthetic Fraud Transactions"
+sidebarTitle: "GAN Training"
+description: "Train the generator and discriminator adversarially to produce synthetic fraud samples that match real transaction statistics for dataset balancing."
+---
+
+Credit card fraud datasets are inherently imbalanced — genuine transactions outnumber fraudulent ones by a wide margin. Training classifiers directly on such skewed data causes models to favour the majority class and miss real fraud. This pipeline addresses the imbalance by training a **Generative Adversarial Network (GAN)** on the minority class (fraud) and using it to synthesise additional fraud samples that statistically resemble real ones.
+
+## Building the Models
+
+The GAN consists of two neural networks that compete against each other during training.
+
+### Generator
+
+The generator learns to map a random noise vector to a synthetic fraud transaction. It is built as a fully connected `Sequential` model with `BatchNormalization`, `LeakyReLU` activations, and `Dropout` for regularisation:
+
+```python
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, BatchNormalization, LeakyReLU, Dropout
+
+def build_generator(input_dim, output_dim):
+    model = Sequential([
+        Dense(128, input_dim=input_dim),
+        LeakyReLU(alpha=0.2),
+        BatchNormalization(momentum=0.8),
+        Dropout(0.3),
+
+        Dense(256),
+        LeakyReLU(alpha=0.2),
+        BatchNormalization(momentum=0.8),
+        Dropout(0.3),
+
+        Dense(512),
+        LeakyReLU(alpha=0.2),
+        BatchNormalization(momentum=0.8),
+
+        Dense(output_dim, activation='tanh'),
+    ], name='generator')
+    return model
+```
+
+### Discriminator
+
+The discriminator is a binary classifier that distinguishes real fraud transactions from generator output. It shares the same architectural building blocks but ends with a single sigmoid unit:
+
+```python
+def build_discriminator(input_dim):
+    model = Sequential([
+        Dense(512, input_dim=input_dim),
+        LeakyReLU(alpha=0.2),
+        Dropout(0.3),
+
+        Dense(256),
+        LeakyReLU(alpha=0.2),
+        Dropout(0.3),
+
+        Dense(128),
+        LeakyReLU(alpha=0.2),
+        Dropout(0.3),
+
+        Dense(1, activation='sigmoid'),
+    ], name='discriminator')
+    return model
+```
+
+## Combining into a GAN
+
+The combined GAN model chains the generator and discriminator end-to-end so that generator weights can be updated through the discriminator's loss signal. The discriminator must be **frozen** (`trainable = False`) during this combined forward pass — otherwise both networks would receive conflicting gradient updates from the same backward pass:
+
+```python
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input
+
+def build_gan(generator, discriminator):
+    # Freeze discriminator weights for generator training
+    discriminator.trainable = False
+
+    gan_input = Input(shape=(generator.input_shape[1],))
+    x = generator(gan_input)
+    gan_output = discriminator(x)
+
+    gan = Model(gan_input, gan_output, name='gan')
+    gan.compile(loss='binary_crossentropy', optimizer='adam')
+    return gan
+```
+
+Setting `discriminator.trainable = False` inside the GAN context means that when the GAN is trained, only the generator's weights are updated — the discriminator is used purely as a differentiable loss function for the generator.
+
+## Training Loop
+
+Training alternates between two phases every epoch:
+
+1. **Discriminator update** — real fraud samples are labelled `1` and generator output is labelled `0`; the discriminator is trained on both batches.
+2. **Generator update** — the GAN is trained end-to-end with the discriminator frozen, using misleading labels (`1`) so the generator learns to produce samples the discriminator cannot distinguish from real ones.
+
+```python
+def train_gan(generator, discriminator, gan, real_fraud_data,
+              epochs=5000, batch_size=64):
+
+    for epoch in range(epochs):
+        # ── Phase 1: Train discriminator ──────────────────────────────────
+        idx = np.random.randint(0, real_fraud_data.shape[0], batch_size)
+        real_samples = real_fraud_data[idx]
+
+        noise = np.random.normal(0, 1, (batch_size, generator.input_shape[1]))
+        fake_samples = generator.predict(noise, verbose=0)
+
+        d_loss_real = discriminator.train_on_batch(
+            real_samples, np.ones((batch_size, 1))
+        )
+        d_loss_fake = discriminator.train_on_batch(
+            fake_samples, np.zeros((batch_size, 1))
+        )
+        d_loss = 0.5 * (d_loss_real + d_loss_fake)
+
+        # ── Phase 2: Train generator (via GAN) ───────────────────────────
+        noise = np.random.normal(0, 1, (batch_size, generator.input_shape[1]))
+        g_loss = gan.train_on_batch(noise, np.ones((batch_size, 1)))
+
+        if epoch % 500 == 0:
+            print(f'Epoch {epoch:>5} | D loss: {d_loss:.4f} | G loss: {g_loss:.4f}')
+            monitor_generator(generator, real_fraud_data)
+```
+
+## Monitoring Quality
+
+The `monitor_generator` function generates a snapshot of synthetic samples every N epochs and overlays them on real fraud data in PCA space. If the synthetic cluster drifts away from the real cluster, training is still unstable; a tight overlap signals good convergence:
+
+```python
+def monitor_generator(generator, real_fraud_data, num_samples=492):
+    synthetic = generate_synthetic_data(generator, num_samples)
+
+    pca = PCA(2)
+    all_data = np.vstack([real_fraud_data, synthetic])
+    projected = pca.fit_transform(all_data)
+
+    n_real = len(real_fraud_data)
+    plt.figure(figsize=(7, 4))
+    plt.scatter(projected[:n_real, 0], projected[:n_real, 1],
+                label='Real fraud',      alpha=0.6, s=10, c='crimson')
+    plt.scatter(projected[n_real:, 0], projected[n_real:, 1],
+                label='Synthetic fraud', alpha=0.6, s=10, c='darkorange')
+    plt.title('GAN Monitor: Real vs Synthetic Fraud (PCA)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+```
+
+## Generating Synthetic Data
+
+Once training converges, `generate_synthetic_data` draws `num_samples` vectors from standard Gaussian noise and passes them through the trained generator:
+
+```python
+def generate_synthetic_data(generator, num_samples=492):
+    noise = np.random.normal(0, 1, (num_samples, generator.input_shape[1]))
+    fake_data = generator.predict(noise)
+    return fake_data
+
+# Generate enough synthetic fraud to match the real fraud count
+synthetic_fraud = generate_synthetic_data(generator, num_samples=492)
+```
+
+The value **492** is chosen to match the number of real fraud transactions in the original dataset (`Class == 1`). Doubling the minority-class count provides a balanced boost without inflating the dataset to an unwieldy size.
+
+<Tip>
+  **Monitoring GAN convergence with PCA**
+
+  PCA plots are a lightweight, model-agnostic way to spot GAN failure modes. Watch for two common problems:
+
+  - **Mode collapse** — all synthetic points collapse to a single location in PCA space, meaning the generator has found one "safe" output that always fools the discriminator.
+  - **Distribution shift** — the synthetic cluster consistently sits offset from the real cluster, indicating the generator has learned the wrong statistical moments.
+
+  If either symptom appears, try reducing the learning rate, adding more Dropout, or training for more epochs before re-generating synthetic data.
+</Tip>
