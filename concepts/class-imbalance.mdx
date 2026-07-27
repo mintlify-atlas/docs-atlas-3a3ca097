@@ -1,7 +1,7 @@
 ---
 title: "Class Imbalance in Fraud Detection: The Sampling Challenge"
 sidebarTitle: "Class Imbalance"
-description: "With only 492 fraud cases among 50,000 genuine transactions, naive classifiers default to 99%+ accuracy by ignoring fraud. Learn how FFD solves this with a GAN."
+description: "With 492 fraud cases out of 50,492 transactions, naive classifiers reach 99%+ accuracy by ignoring fraud entirely. Learn how FFD addresses this with a GAN."
 ---
 
 In real-world fraud detection, fraudulent events are rare by design — and that rarity creates a fundamental machine learning challenge. When a dataset contains vastly more examples of one class than another, standard classifiers tend to learn the easy answer: predict the majority class for every input. The result is a model that looks highly accurate on paper but is operationally useless, because it never actually flags any fraud.
@@ -38,7 +38,7 @@ Both methods lack the capacity to model the full joint distribution of fraud fea
 
 FFD trains a **Generative Adversarial Network (GAN)** on the 492 real fraud samples. Once trained, the generator can produce arbitrarily many new synthetic fraud transactions that statistically resemble real fraud data — not by copying or interpolating, but by learning the underlying distribution.
 
-After training, **492 synthetic fraud samples** are generated and combined with the original dataset, bringing the class ratio close to **1:1** for the training phase of the downstream classifiers.
+After training, **1,000 synthetic fraud samples** are generated and combined with the original 492 real fraud records, bringing the combined fraud pool to 1,492 samples for the training phase of the downstream classifiers.
 
 ```python
 def generate_synthetic_data(generator, num_samples):
@@ -53,10 +53,10 @@ The function works as follows:
 2. **Generate samples** — pass the noise through the trained generator to produce `num_samples` synthetic feature vectors.
 3. **Return data** — the output is a NumPy array ready to be concatenated with the real fraud data.
 
-To generate the 492 synthetic samples used for balancing:
+To generate the 1,000 synthetic samples used for balancing:
 
 ```python
-synthetic_data = generate_synthetic_data(generator, 492)
+synthetic_data = generate_synthetic_data(generator, 1000)
 ```
 
 ## Monitoring Synthesis Quality

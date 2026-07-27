@@ -40,26 +40,30 @@ The `Class` column is the target label: `0` for genuine transactions and `1` for
     Transaction amounts vary across several orders of magnitude. Applying `StandardScaler` brings `Amount` onto the same scale as the anonymised `V1`–`V28` features, preventing large raw values from dominating distance-based and gradient-based learners.
   </Step>
   <Step title="Split features and labels">
-    Separate the cleaned DataFrame into a feature matrix `X` (all columns except `Class`) and a label vector `y` (`Class`).
+    Separate the cleaned DataFrame into a feature matrix `x` (all columns except `Class`) and a label vector `y` (`Class`).
   </Step>
 </Steps>
 
 The complete preprocessing block:
 
 ```python
-# 1. Remove incomplete rows
-data = data.dropna()
+# 1. Remove incomplete rows (in-place)
+data.dropna(inplace=True)
 
 # 2. Drop the Time column
-data = data.drop(columns=['Time'])
+data = data.drop(axis=1, columns='Time')
 
 # 3. Scale the Amount column
 scaler = StandardScaler()
 data['Amount'] = scaler.fit_transform(data[['Amount']])
 
-# 4. Split into features and labels
-X = data.drop(columns=['Class'])
-y = data['Class']
+# 4. Split genuine and fraud records into separate dataframes
+data_fraud = data[data.Class == 1]
+data_genuine = data[data.Class == 0]
+
+# 5. Split into features and labels
+x = data.drop("Class", axis=1)
+y = data.Class
 ```
 
 ## PCA Visualization
@@ -67,26 +71,19 @@ y = data['Class']
 After cleaning, a two-component PCA projection gives an intuitive visual check of how separable the two classes are before any model is trained.
 
 ```python
+import plotly.express as px
+
 # Project down to 2 dimensions for visualization
 pca = PCA(2)
-X_pca = pca.fit_transform(X)
+transformed_data = pca.fit_transform(x)
 
-import matplotlib.pyplot as plt
+df = pd.DataFrame(transformed_data)
+df['label'] = y
 
-plt.figure(figsize=(8, 5))
-plt.scatter(X_pca[y == 0, 0], X_pca[y == 0, 1],
-            label='Genuine', alpha=0.3, s=5, c='steelblue')
-plt.scatter(X_pca[y == 1, 0], X_pca[y == 1, 1],
-            label='Fraud',   alpha=0.8, s=10, c='crimson')
-plt.xlabel('PC 1')
-plt.ylabel('PC 2')
-plt.title('PCA Projection: Genuine vs Fraud Transactions')
-plt.legend()
-plt.tight_layout()
-plt.show()
+px.scatter(df, x=0, y=1, color=df.label.astype(str))
 ```
 
-The resulting scatter plot reveals that fraudulent transactions (red) tend to occupy a distinct, compact region of the feature space, while genuine transactions (blue) form a much broader cloud. This separation confirms that the downstream classifiers have a meaningful signal to learn from.
+The resulting scatter plot reveals that fraudulent transactions tend to occupy a distinct, compact region of the feature space, while genuine transactions form a much broader cloud. This separation confirms that the downstream classifiers have a meaningful signal to learn from.
 
 <Note>
   **Why drop `Time` and scale `Amount`?**

@@ -30,7 +30,7 @@ By the end of this guide you will have the FFD repository running locally, all d
     Install all required packages with a single `pip` command:
 
     ```bash
-    pip install tensorflow==2.11 visualkeras numpy pandas scikit-learn seaborn matplotlib plotly
+    pip install tensorflow==2.11 visualkeras numpy pandas scikit-learn seaborn matplotlib plotly xgboost lightgbm
     ```
 
     <Note>
@@ -49,7 +49,7 @@ By the end of this guide you will have the FFD repository running locally, all d
   </Step>
 
   <Step title="Run cells in order">
-    Execute every cell from top to bottom. The notebook is divided into seven sequential steps:
+    Execute every cell from top to bottom. The notebook is divided into eight sequential steps:
 
     | Step | What it does |
     |------|-------------|
@@ -58,8 +58,9 @@ By the end of this guide you will have the FFD repository running locally, all d
     | **3 — Data preprocessing** | Drops `NaN` rows, removes the `Time` column, scales `Amount` with `StandardScaler`, splits features `x` and labels `y`, and renders a 2-D PCA scatter plot of the full dataset. |
     | **4 — Build generator** | Defines and calls `build_generator()` — a Keras sequential model that maps a noise vector to a 29-dimensional synthetic fraud sample using `Dense`, `BatchNormalization`, `LeakyReLU`, and `Dropout` layers. |
     | **5 — Build discriminator** | Defines and calls `build_discriminator()` — a Keras sequential binary classifier (`input_dim=29`) that learns to separate real from fake fraud records. |
-    | **6 — Assemble GAN** | Calls `build_gan(generator, discriminator)`, freezes the discriminator weights (`discriminator.trainable = False`), and compiles the combined model with `adam` optimizer and `binary_crossentropy` loss. |
-    | **7 — Train, generate, classify, evaluate** | Runs the full GAN training loop, generates synthetic data, trains all six classifiers, and prints evaluation reports. |
+    | **6 — Assemble and train the GAN** | Calls `build_gan(generator, discriminator)`, freezes the discriminator weights (`discriminator.trainable = False`), compiles the combined model with `adam` optimizer and `binary_crossentropy` loss, then runs the full 1,000-epoch training loop. |
+    | **7 — Generate synthetic data** | Calls `generate_synthetic_data(generator, 1000)` to produce 1,000 synthetic fraud samples, then plots real vs. synthetic distributions side-by-side using PCA for visual validation. |
+    | **8 — Train classifiers and evaluate** | Combines real and synthetic fraud data, trains all six classifiers, and prints classification reports and confusion matrix heatmaps for each. |
   </Step>
 </Steps>
 
@@ -71,10 +72,10 @@ The GAN trains for **1,000 epochs** with a batch size of 64 (32 real + 32 synthe
 
 ### Synthetic Data Generation
 
-After training, `generate_synthetic_data(generator, 492)` draws 492 random noise vectors from a standard normal distribution, passes them through the trained generator, and returns 492 synthetic fraud feature vectors. These are appended to the real dataset before classifiers are trained, producing a balanced training split.
+After training, `generate_synthetic_data(generator, 1000)` draws 1,000 random noise vectors from a standard normal distribution, passes them through the trained generator, and returns 1,000 synthetic fraud feature vectors. These samples are used to visually compare the synthetic distribution against the 492 real fraud records via PCA scatter plots, confirming the generator has learned a realistic fraud distribution.
 
 ```python
-synthetic_data = generate_synthetic_data(generator, 492)
+synthetic_data = generate_synthetic_data(generator, 1000)
 ```
 
 ### Classifier Training

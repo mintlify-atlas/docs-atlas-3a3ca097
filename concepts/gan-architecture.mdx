@@ -175,10 +175,10 @@ def build_gan(generator, discriminator):
     Every 10 epochs, `monitor_generator()` projects real and synthetic fraud data to 2D via PCA and renders a scatter plot. Convergence is visible when the two clusters overlap closely.
   </Step>
   <Step title="Generate final synthetic dataset">
-    After training completes, generate 492 synthetic fraud samples and merge them with the real dataset for classifier training.
+    After training completes, generate 1,000 synthetic fraud samples and merge them with the real dataset for classifier training.
 
     ```python
-    synthetic_data = generate_synthetic_data(generator, 492)
+    synthetic_data = generate_synthetic_data(generator, 1000)
     ```
   </Step>
 </Steps>

@@ -15,11 +15,11 @@ Real-world fraud datasets are inherently imbalanced. In the FFD dataset, only **
 | Genuine (0) | 50,000 | ~99.03% |
 | Fraudulent (1) | 492 | ~0.97% |
 
-To counteract this imbalance, FFD trains a **GAN** on the 492 real fraud examples. The generator learns the statistical distribution of fraudulent transactions and synthesizes 492 additional samples. These synthetic fraud examples are then combined with the real dataset before classifiers are trained, giving each model a balanced signal to learn from.
+To counteract this imbalance, FFD trains a **GAN** on the 492 real fraud examples. The generator learns the statistical distribution of fraudulent transactions and synthesizes 1,000 additional samples. These synthetic fraud examples are then combined with the real fraud records before classifiers are trained, giving each model a richer signal to learn from.
 
 ## Pipeline Overview
 
-The FFD notebook (`Design_Project.ipynb`) walks through a sequential seven-step pipeline:
+The FFD notebook (`Design_Project.ipynb`) walks through a sequential eight-step pipeline:
 
 1. **Import dependencies** — Load all required libraries (TensorFlow/Keras, scikit-learn, XGBoost, LightGBM, and visualization tools).
 2. **Load dataset** — Read `Creditcard_dataset.csv` into a pandas DataFrame and inspect its shape and class distribution.
@@ -27,7 +27,8 @@ The FFD notebook (`Design_Project.ipynb`) walks through a sequential seven-step 
 4. **Build the generator** — Define `build_generator()`, a neural network that maps random noise to synthetic fraud feature vectors using TensorFlow/Keras.
 5. **Build the discriminator** — Define `build_discriminator()`, a binary classifier that learns to distinguish real from synthetic fraud records.
 6. **Assemble the GAN** — Combine generator and discriminator into a full GAN via `build_gan(generator, discriminator)` and compile with `adam` / `binary_crossentropy`.
-7. **Train the GAN, generate data, train classifiers, evaluate** — Run 1,000 training epochs, monitor generator quality with PCA via `monitor_generator()`, generate 492 synthetic fraud samples with `generate_synthetic_data(generator, 492)`, train all six classifiers on the augmented dataset, and evaluate each with classification reports and confusion matrices.
+7. **Train the GAN and generate synthetic data** — Run 1,000 training epochs, monitor generator quality with PCA via `monitor_generator()`, then generate 1,000 synthetic fraud samples with `generate_synthetic_data(generator, 1000)` and compare their distribution against real fraud records.
+8. **Train classifiers and evaluate** — Train all six classifiers on the augmented (real + synthetic) dataset and evaluate each with classification reports and confusion matrices.
 
 ## Classifiers
 
@@ -83,12 +84,12 @@ FFD trains and evaluates six supervised classifiers on the combined real + synth
 | Package | Version / Notes |
 |---------|-----------------|
 | `tensorflow` | `==2.11` — required for Keras API compatibility |
-| `scikit-learn` | Preprocessing, classifiers, and evaluation metrics |
-| `xgboost` | `XGBClassifier` for gradient-boosted trees |
-| `lightgbm` | `LGBMClassifier` for histogram-based boosting |
-| `pandas` | DataFrame operations and CSV I/O |
+| `visualkeras` | Neural network architecture diagrams |
 | `numpy` | Numerical computations and array handling |
+| `pandas` | DataFrame operations and CSV I/O |
+| `scikit-learn` | Preprocessing, classifiers, and evaluation metrics |
 | `seaborn` | Confusion matrix heatmaps |
 | `matplotlib` | General-purpose plotting |
 | `plotly` | Interactive scatter plots for PCA visualization |
-| `visualkeras` | Neural network architecture diagrams |
+| `xgboost` | `XGBClassifier` for gradient-boosted trees |
+| `lightgbm` | `LGBMClassifier` for histogram-based boosting |
